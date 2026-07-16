@@ -7,6 +7,12 @@ on:
   pull_request:
     paths: ['build-iso.sh', 'haos-installer.sh']
 
+# Le conteneur Debian execute les 'run' avec sh (dash) par defaut, qui ignore
+# les bashismes (ex: ${VAR//x/y}). On force bash partout.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build:
     # Les runners GitHub n'existent qu'en Ubuntu/Windows/macOS : pas de Debian.
@@ -54,7 +60,8 @@ jobs:
         id: iso
         run: |
           ISO=$(ls haos-installer-iso/live-image-*.iso | head -1)
-          NAME="haos-netinstall-${GITHUB_REF_NAME//\//-}-amd64.iso"
+          REF=$(echo "${GITHUB_REF_NAME:-manual}" | tr '/' '-')
+          NAME="haos-netinstall-${REF}-amd64.iso"
           mv "$ISO" "$NAME"
           sha256sum "$NAME" > "$NAME.sha256"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
