@@ -9,7 +9,14 @@ on:
 
 jobs:
   build:
+    # Les runners GitHub n'existent qu'en Ubuntu/Windows/macOS : pas de Debian.
+    # On build donc DANS un conteneur Debian (meme live-build et meme debootstrap
+    # que l'environnement de dev), sur un hote Ubuntu.
+    # --privileged est requis : live-build a besoin des loop devices et de chroot.
     runs-on: ubuntu-latest
+    container:
+      image: debian:trixie
+      options: --privileged
     permissions:
       contents: write          # requis pour créer la release sur tag
     steps:
@@ -19,14 +26,29 @@ jobs:
         run: |
           bash -n build-iso.sh
           bash -n haos-installer.sh
-          sudo apt-get update && sudo apt-get install -y shellcheck
+          apt-get update && apt-get install -y shellcheck
           shellcheck -S warning build-iso.sh haos-installer.sh || true
 
       - name: Installer live-build
-        run: sudo apt-get install -y live-build debootstrap
+        run: |
+          apt-get install -y live-build debootstrap p7zip-full fdisk sudo
+          lb --version
+          echo "--- debootstrap connait-il la cible ? ---"
+          ls /usr/share/debootstrap/scripts/ | grep -E 'trixie|bookworm' || true
 
       - name: Construire l'ISO
-        run: sudo ./build-iso.sh
+        run: |
+          chmod +x build-iso.sh haos-installer.sh
+          bash ./build-iso.sh
+
+      - name: Vérifier la conformité UEFI de l'ISO
+        run: |
+          ISO=$(ls haos-installer-iso/live-image-*.iso | head -1)
+          fdisk -l "$ISO" | grep -qi 'EFI' \
+            || { echo "ERREUR: pas de partition EFI dans l'ISO"; exit 1; }
+          7z l "$ISO" | grep -qi 'bootx64.efi' \
+            || { echo "ERREUR: /EFI/boot/bootx64.efi absent"; exit 1; }
+          echo "OK: ISO UEFI-conforme (ESP + bootx64.efi)"
 
       - name: Renommer et calculer le SHA256
         id: iso
