@@ -1,0 +1,70 @@
+name: Build ISO
+
+on:
+  workflow_dispatch:          # build manuel
+  push:
+    tags: ['v*']              # un tag v1.0.0 -> build + release
+  pull_request:
+    paths: ['build-iso.sh', 'haos-installer.sh']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write          # requis pour créer la release sur tag
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vérification syntaxe
+        run: |
+          bash -n build-iso.sh
+          bash -n haos-installer.sh
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          shellcheck -S warning build-iso.sh haos-installer.sh || true
+
+      - name: Installer live-build
+        run: sudo apt-get install -y live-build debootstrap
+
+      - name: Construire l'ISO
+        run: sudo ./build-iso.sh
+
+      - name: Renommer et calculer le SHA256
+        id: iso
+        run: |
+          ISO=$(ls haos-installer-iso/live-image-*.iso | head -1)
+          NAME="haos-netinstall-${GITHUB_REF_NAME//\//-}-amd64.iso"
+          mv "$ISO" "$NAME"
+          sha256sum "$NAME" > "$NAME.sha256"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "### $NAME" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          du -h "$NAME" >> "$GITHUB_STEP_SUMMARY"
+          cat "$NAME.sha256" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publier en artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.iso.outputs.name }}
+          path: |
+            ${{ steps.iso.outputs.name }}
+            ${{ steps.iso.outputs.name }}.sha256
+          retention-days: 14
+
+      - name: Publier la release (sur tag uniquement)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.iso.outputs.name }}
+            ${{ steps.iso.outputs.name }}.sha256
+          body: |
+            ISO d'installation Home Assistant OS (bare-metal) — build automatique.
+
+            **Livré tel quel, sans garantie ni support.** Cet outil efface
+            intégralement le disque sélectionné. Voir le README et la LICENSE.
+
+            Projet non officiel, sans affiliation avec l'Open Home Foundation
+            ni Nabu Casa.
+
+            Vérifiez l'intégrité avec le fichier `.sha256` joint.
