@@ -37,7 +37,8 @@ jobs:
 
       - name: Installer live-build
         run: |
-          apt-get install -y live-build debootstrap p7zip-full fdisk sudo
+          apt-get install -y live-build debootstrap fdisk sudo libarchive-tools xorriso
+          apt-get install -y p7zip-full || true   # absent de certaines versions Debian
           lb --version
           echo "--- debootstrap connait-il la cible ? ---"
           ls /usr/share/debootstrap/scripts/ | grep -E 'trixie|bookworm' || true
@@ -49,11 +50,33 @@ jobs:
 
       - name: Vérifier la conformité UEFI de l'ISO
         run: |
+          set -x
           ISO=$(ls haos-installer-iso/live-image-*.iso | head -1)
-          fdisk -l "$ISO" | grep -qi 'EFI' \
+
+          # 1) Partition EFI presente dans la table
+          fdisk -l "$ISO" | grep -i 'EFI' \
             || { echo "ERREUR: pas de partition EFI dans l'ISO"; exit 1; }
-          7z l "$ISO" | grep -qi 'bootx64.efi' \
-            || { echo "ERREUR: /EFI/boot/bootx64.efi absent"; exit 1; }
+
+          # 2) Chargeur de repli present. On liste l'ISO9660 avec plusieurs outils :
+          #    un outil manquant ne doit PAS etre confondu avec un fichier absent.
+          LIST=""
+          for tool in "bsdtar -tf" "7z l" "xorriso -indev"; do
+            bin=${tool%% *}
+            command -v "$bin" >/dev/null || continue
+            case "$bin" in
+              xorriso) out=$(xorriso -indev "$ISO" -find / 2>/dev/null) ;;
+              *)       out=$($tool "$ISO" 2>/dev/null) ;;
+            esac
+            [ -n "$out" ] && { LIST="$out"; echo "--- liste obtenue via $bin ---"; break; }
+          done
+
+          if [ -z "$LIST" ]; then
+            echo "ERREUR: aucun outil n'a pu lister l'ISO (bsdtar/7z/xorriso)"; exit 1
+          fi
+
+          echo "$LIST" | grep -i 'efi' || true
+          echo "$LIST" | grep -qi 'bootx64.efi' \
+            || { echo "ERREUR: /EFI/boot/bootx64.efi introuvable dans l'ISO"; exit 1; }
           echo "OK: ISO UEFI-conforme (ESP + bootx64.efi)"
 
       - name: Renommer et calculer le SHA256
