@@ -52,6 +52,9 @@ curl
 xz-utils
 util-linux
 efibootmgr
+mokutil
+dosfstools
+parted
 EOF
 # --- Assistant guidé ---
 mkdir -p config/includes.chroot/usr/local/bin
