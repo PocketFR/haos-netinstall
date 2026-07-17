@@ -138,24 +138,75 @@ die(){ whiptail --title "$S_TITLE" --msgbox "$1$S_RESCUE" 12 72; save_log; loud_
 # ECRAN 1 : langue + clavier en une question.
 # La disposition n'implique PAS la langue (un francophone peut etre en QWERTY US)
 # -> chaque ligne annonce explicitement les deux, aucune deduction.
+# Applique la disposition. NB: deux mondes de noms coexistent —
+#   - console-setup / setupcon : noms X11 (fr, be, ch+variante fr, ca, us, gb, de)
+#   - loadkeys : noms de keymaps console (fr-latin9, cf, fr_CH, uk...)
+# console-setup est installe et fait autorite via /etc/default/keyboard : c'est lui
+# qu'il faut piloter, sinon il reapplique sa conf par-dessus loadkeys.
+apply_keymap(){
+  local layout="$1" variant="${2:-}" out=""
+
+  if [ -w /etc/default/keyboard ] && command -v setupcon >/dev/null 2>&1; then
+    sed -i -e "s/^XKBLAYOUT=.*/XKBLAYOUT=\"$layout\"/" \
+           -e "s/^XKBVARIANT=.*/XKBVARIANT=\"$variant\"/" /etc/default/keyboard 2>>"$LOG"
+    grep -q '^XKBLAYOUT=' /etc/default/keyboard || echo "XKBLAYOUT=\"$layout\"" >> /etc/default/keyboard
+    grep -q '^XKBVARIANT=' /etc/default/keyboard || echo "XKBVARIANT=\"$variant\"" >> /etc/default/keyboard
+    out=$(setupcon --force 2>&1) && return 0
+  fi
+
+  # Repli loadkeys, avec traduction vers les noms de keymaps console
+  local km="$layout"
+  case "$layout:$variant" in
+    fr:)     km="fr-latin9" ;;
+    be:)     km="be-latin1" ;;
+    ch:fr)   km="fr_CH-latin1" ;;
+    ca:*)    km="cf" ;;
+    gb:)     km="uk" ;;
+    de:)     km="de-latin1" ;;
+  esac
+  out="$out"$'\n'"$(loadkeys "$km" 2>&1)" && return 0
+
+  # Ne plus echouer en silence : c'est ce qui a masque le bug precedent.
+  whiptail --title "$S_TITLE" --msgbox \
+    "Keyboard layout could not be applied / La disposition n'a pas pu être appliquée :\n\n$(echo "$out" | cut -c1-64 | head -6)\n\nQWERTY/AZERTY may be wrong. Use the manual config if needed." 15 72
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# ECRAN 1 : langue + clavier en une question.
+# La disposition n'implique PAS la langue (un francophone peut etre en QWERTY US)
+# -> chaque ligne annonce explicitement les deux, aucune deduction.
 choose_lang_keyboard(){
   local sel
   sel=$(whiptail --title "Language & keyboard / Langue et clavier" --menu \
     "Choose language and keyboard layout\nChoisissez la langue et la disposition du clavier" \
     18 66 8 \
-    "fr|fr"     "Français  |  AZERTY   (France)" \
-    "fr|be"     "Français  |  AZERTY   (Belgique)" \
-    "fr|ch(fr)" "Français  |  QWERTZ   (Suisse)" \
-    "fr|ca"     "Français  |  QWERTY   (Canada)" \
-    "fr|us"     "Français  |  QWERTY   (US)" \
-    "en|us"     "English   |  QWERTY   (US)" \
-    "en|uk"     "English   |  QWERTY   (UK)" \
-    "en|de"     "English   |  QWERTZ   (DE)" \
-    3>&1 1>&2 2>&3) || sel="fr|fr"
+    "fr|fr|"    "Français  |  AZERTY   (France)" \
+    "fr|be|"    "Français  |  AZERTY   (Belgique)" \
+    "fr|ch|fr"  "Français  |  QWERTZ   (Suisse)" \
+    "fr|ca|"    "Français  |  QWERTY   (Canada)" \
+    "fr|us|"    "Français  |  QWERTY   (US)" \
+    "en|us|"    "English   |  QWERTY   (US)" \
+    "en|gb|"    "English   |  QWERTY   (UK)" \
+    "en|de|"    "English   |  QWERTZ   (DE)" \
+    3>&1 1>&2 2>&3) || sel="fr|fr|"
 
   UI_LANG="${sel%%|*}"
-  loadkeys "${sel##*|}" >/dev/null 2>&1 || true
+  local rest="${sel#*|}"
+  apply_keymap "${rest%%|*}" "${rest#*|}"
   set_strings
+
+  # Verification par l'utilisateur : c'est le seul test fiable de la disposition.
+  local probe
+  probe=$(whiptail --title "$S_TITLE" --inputbox \
+    "Test / Vérification\n\nType:  a q m 1 2 3    /    Tape :  a q m 1 2 3\n\nIf what appears is wrong, go back and pick another layout.\nSi ce qui s'affiche est faux, reviens choisir une autre disposition." \
+    14 72 3>&1 1>&2 2>&3) || true
+  case "$probe" in
+    "aqm123"|"") return 0 ;;
+    *) whiptail --title "$S_TITLE" --yesno \
+         "Expected \"aqm123\", got \"$probe\".\nAttendu « aqm123 », obtenu « $probe ».\n\nRetry / Choisir une autre disposition ?" 12 68 \
+         && choose_lang_keyboard ;;
+  esac
 }
 
 have_net(){ curl -fsI --max-time 5 https://github.com >/dev/null 2>&1; }
