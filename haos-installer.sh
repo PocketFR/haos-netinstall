@@ -9,12 +9,12 @@ TITLE="Installation Home Assistant OS"
 
 die(){ whiptail --title "$TITLE" --msgbox "$1\n\nUn terminal de secours va s'ouvrir." 12 72; clear; exec bash; }
 
-# --- Version : dernière release, sinon repli ---
-HAOS_VERSION=$(curl -fsSL --max-time 10 \
-  https://api.github.com/repos/home-assistant/operating-system/releases/latest \
-  2>/dev/null | grep -oP '"tag_name":\s*"\K[^"]+' || true)
-[ -n "${HAOS_VERSION:-}" ] || HAOS_VERSION="18.1"
-IMG_URL="https://github.com/home-assistant/operating-system/releases/download/${HAOS_VERSION}/haos_generic-x86-64-${HAOS_VERSION}.img.xz"
+# --- Version de HAOS ---
+# Resolue APRES la configuration reseau (resolve_version) : en Wi-Fi, aucun reseau
+# n'est disponible au lancement du script. Valeur de repli si l'API est injoignable.
+HAOS_FALLBACK="18.1"
+HAOS_VERSION=""
+IMG_URL=""
 
 # Média live (à exclure de la liste des cibles)
 live_dev=$(findmnt -no SOURCE /run/live/medium 2>/dev/null | sed -E 's,/dev/,,; s/p?[0-9]+$//' || true)
@@ -106,6 +106,28 @@ setup_network(){
 }
 
 # ---------------------------------------------------------------------------
+# A appeler UNIQUEMENT une fois le reseau operationnel.
+resolve_version(){
+  whiptail --title "$TITLE" --infobox "Recherche de la dernière version de Home Assistant OS..." 7 66
+  HAOS_VERSION=$(curl -fsSL --max-time 15 \
+    https://api.github.com/repos/home-assistant/operating-system/releases/latest \
+    2>/dev/null | grep -oP '"tag_name":\s*"\K[^"]+' || true)
+
+  if [ -z "$HAOS_VERSION" ]; then
+    HAOS_VERSION="$HAOS_FALLBACK"
+    whiptail --title "$TITLE" --yesno \
+      "Impossible de contacter GitHub pour connaître la dernière version.\n\nVersion de repli proposée : $HAOS_VERSION\n(elle peut être ancienne — Home Assistant se mettra à jour\nlui-même après l'installation)\n\nContinuer avec cette version ?" \
+      15 70 || die "Installation annulée."
+  fi
+
+  IMG_URL="https://github.com/home-assistant/operating-system/releases/download/${HAOS_VERSION}/haos_generic-x86-64-${HAOS_VERSION}.img.xz"
+
+  # Verifier que l'image existe vraiment avant d'effacer quoi que ce soit
+  curl -fsI --max-time 15 "$IMG_URL" >/dev/null 2>&1 \
+    || die "Image introuvable pour la version $HAOS_VERSION :\n$IMG_URL"
+}
+
+# ---------------------------------------------------------------------------
 pick_disk(){
   local menu=()
   while IFS= read -r line; do
@@ -189,11 +211,12 @@ finalize(){
 
 # ---------------------------------------------------------------------------
 whiptail --title "$TITLE" --msgbox \
-  "Bienvenue.\n\nCet outil installe Home Assistant OS $HAOS_VERSION sur ce PC, sans ligne de commande.\n\nAVANT DE CONTINUER — dans le BIOS/UEFI (touche Suppr/F2 au démarrage) :\n   • Mode de démarrage : UEFI\n   • Secure Boot : DÉSACTIVÉ  (obligatoire pour HAOS)\n\nÀ l'étape suivante, TOUT le disque que tu choisiras sera effacé." \
+  "Bienvenue.\n\nCet outil installe la dernière version de Home Assistant OS\nsur ce PC, sans ligne de commande.\n\nAVANT DE CONTINUER — dans le BIOS/UEFI (touche Suppr/F2 au démarrage) :\n   • Mode de démarrage : UEFI\n   • Secure Boot : DÉSACTIVÉ  (obligatoire pour HAOS)\n\nÀ l'étape suivante, TOUT le disque que tu choisiras sera effacé." \
   17 74
 
 setup_keyboard
 setup_network
+resolve_version    # NECESSITE le reseau : doit rester apres setup_network
 pick_disk
 flash
 finalize
