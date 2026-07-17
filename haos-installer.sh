@@ -22,6 +22,23 @@ live_dev=$(findmnt -no SOURCE /run/live/medium 2>/dev/null | sed -E 's,/dev/,,; 
 have_net(){ curl -fsI --max-time 5 https://github.com >/dev/null 2>&1; }
 
 # ---------------------------------------------------------------------------
+# Clavier : le live est configure en fr via keyboard-layouts, mais on laisse la
+# main (ISO potentiellement utilise hors France, ou reglage non applique).
+setup_keyboard(){
+  local kb
+  kb=$(whiptail --title "$TITLE" --menu \
+    "Disposition du clavier :\n(teste les touches A, Q, M et les chiffres après validation)" \
+    15 62 5 \
+    "fr" "AZERTY  - France" \
+    "be" "AZERTY  - Belgique" \
+    "ch(fr)" "QWERTZ  - Suisse romande" \
+    "ca" "QWERTY  - Canada" \
+    "us" "QWERTY  - US / international" \
+    3>&1 1>&2 2>&3) || kb="fr"
+  loadkeys "$kb" >/dev/null 2>&1 || true
+}
+
+# ---------------------------------------------------------------------------
 setup_network(){
   have_net && return 0
   whiptail --title "$TITLE" --infobox "Recherche d'une connexion filaire (Ethernet)..." 7 62
@@ -38,7 +55,8 @@ setup_network(){
       menu+=("$ssid" "$(printf 'signal %3s%%   %s' "$sig" "${sec:-ouvert}")")
     done < <(nmcli -t -f SSID,SIGNAL,SECURITY dev wifi list 2>/dev/null \
              | awk -F: 'length($1) && !seen[$1]++ {print $1"\t"$2"\t"$3}')
-    menu+=("↻ Relancer le scan" "" "⌨ Configuration manuelle (nmtui)" "")
+    menu+=("↻ Relancer le scan" "")
+    menu+=("⌨ Autre cas (SSID caché, WPA entreprise, IP fixe...)" "-> nmtui")
 
     local choice
     choice=$(whiptail --title "$TITLE" --menu \
@@ -47,12 +65,16 @@ setup_network(){
 
     case "$choice" in
       "↻ Relancer le scan") continue ;;
-      "⌨ Configuration manuelle (nmtui)") clear; nmtui; have_net && return 0 || continue ;;
+      "⌨ Autre cas"*) clear; nmtui; have_net && return 0 || continue ;;
     esac
 
+    # NOTE: --inputbox et non --passwordbox : le mot de passe reste VISIBLE.
+    # Saisie a l'aveugle + risque de mauvaise disposition clavier = trop d'echecs.
+    # La machine est en cours d'installation, personne d'autre ne lit l'ecran.
     local psk
-    psk=$(whiptail --title "$TITLE" --passwordbox \
-      "Mot de passe du réseau « $choice » :" 9 62 3>&1 1>&2 2>&3) || continue
+    psk=$(whiptail --title "$TITLE" --inputbox \
+      "Mot de passe du réseau « $choice » :\n(affiché en clair pour éviter les fautes de frappe)" \
+      10 66 3>&1 1>&2 2>&3) || continue
 
     whiptail --title "$TITLE" --infobox "Connexion à « $choice »..." 7 62
     if nmcli dev wifi connect "$choice" password "$psk" >/dev/null 2>&1 && have_net; then
@@ -149,6 +171,7 @@ whiptail --title "$TITLE" --msgbox \
   "Bienvenue.\n\nCet outil installe Home Assistant OS $HAOS_VERSION sur ce PC, sans ligne de commande.\n\nAVANT DE CONTINUER — dans le BIOS/UEFI (touche Suppr/F2 au démarrage) :\n   • Mode de démarrage : UEFI\n   • Secure Boot : DÉSACTIVÉ  (obligatoire pour HAOS)\n\nÀ l'étape suivante, TOUT le disque que tu choisiras sera effacé." \
   17 74
 
+setup_keyboard
 setup_network
 pick_disk
 flash

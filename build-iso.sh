@@ -2,6 +2,9 @@
 # build-iso.sh — Construit un ISO live "installateur HAOS" néophyte (Debian live-build).
 # Inclut : firmware reseau/Wi-Fi non-libres (sans les blobs GPU/audio), NetworkManager,
 # assistant guide whiptail.
+# NB: pas d'option --bootloaders / --uefi-secure-boot : elles n'existent pas dans
+#     toutes les versions de live-build (echec sur Ubuntu). Inutiles de toute facon,
+#     le defaut produit deja une ESP avec /EFI/boot/bootx64.efi (verifie via fdisk).
 # Prérequis (Debian/Ubuntu, en root) : apt install live-build
 # Lancer depuis un dossier contenant haos-installer.sh :  sudo ./build-iso.sh
 set -euo pipefail
@@ -17,14 +20,12 @@ lb config \
   --distribution trixie \
   --architecture amd64 \
   --binary-images iso-hybrid \
-  --bootloaders "syslinux,grub-efi" \
-  --uefi-secure-boot disable \
   --archive-areas "main contrib non-free non-free-firmware" \
   --firmware-chroot false \
   --debian-installer none \
   --memtest none \
   --iso-volume "HAOS Installer" \
-  --bootappend-live "boot=live components quiet toram"
+  --bootappend-live "boot=live components quiet toram locales=fr_FR.UTF-8 keyboard-layouts=fr timezone=Europe/Paris"
 
 # --- Paquets : firmware reseau + outils de l'assistant (voir liste) ---
 mkdir -p config/package-lists
@@ -42,6 +43,8 @@ firmware-brcm80211
 network-manager
 wpasupplicant
 iw
+console-setup
+kbd
 whiptail
 pv
 curl
