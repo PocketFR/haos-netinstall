@@ -195,18 +195,6 @@ choose_lang_keyboard(){
   local rest="${sel#*|}"
   apply_keymap "${rest%%|*}" "${rest#*|}"
   set_strings
-
-  # Verification par l'utilisateur : c'est le seul test fiable de la disposition.
-  local probe
-  probe=$(whiptail --title "$S_TITLE" --inputbox \
-    "Test / Vérification\n\nType:  a q m 1 2 3    /    Tape :  a q m 1 2 3\n\nIf what appears is wrong, go back and pick another layout.\nSi ce qui s'affiche est faux, reviens choisir une autre disposition." \
-    14 72 3>&1 1>&2 2>&3) || true
-  case "$probe" in
-    "aqm123"|"") return 0 ;;
-    *) whiptail --title "$S_TITLE" --yesno \
-         "Expected \"aqm123\", got \"$probe\".\nAttendu « aqm123 », obtenu « $probe ».\n\nRetry / Choisir une autre disposition ?" 12 68 \
-         && choose_lang_keyboard ;;
-  esac
 }
 
 have_net(){ curl -fsI --max-time 5 https://github.com >/dev/null 2>&1; }
