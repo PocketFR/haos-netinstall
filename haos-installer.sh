@@ -5,9 +5,18 @@
 set -uo pipefail                       # pas de -e : on gère les erreurs pour garder l'assistant vivant
 export NEWT_COLORS='root=,blue; window=,lightgray; border=blue,lightgray; title=blue,'
 
+# Le noyau ecrit ses messages directement sur la console (pas de 'quiet' au boot,
+# volontairement : le defilement rassure et aide au diagnostic). Pendant le TUI ils
+# viennent parasiter les fenetres whiptail -> on ne garde que les urgences.
+# Restaure au niveau normal a la sortie (terminal de secours, reboot).
+quiet_console(){ dmesg -n 1 2>/dev/null || echo 1 > /proc/sys/kernel/printk 2>/dev/null || true; }
+loud_console(){  dmesg -n 7 2>/dev/null || echo 7 > /proc/sys/kernel/printk 2>/dev/null || true; }
+quiet_console
+trap loud_console EXIT
+
 TITLE="Installation Home Assistant OS"
 
-die(){ whiptail --title "$TITLE" --msgbox "$1\n\nUn terminal de secours va s'ouvrir." 12 72; clear; exec bash; }
+die(){ whiptail --title "$TITLE" --msgbox "$1\n\nUn terminal de secours va s'ouvrir." 12 72; loud_console; clear; exec bash; }
 
 # --- Version de HAOS ---
 # Resolue APRES la configuration reseau (resolve_version) : en Wi-Fi, aucun reseau
@@ -86,7 +95,7 @@ setup_network(){
 
     case "$choice" in
       "[ Relancer le scan ]")        continue ;;
-      "[ Configuration manuelle ]")  clear; nmtui; have_net && return 0 || continue ;;
+      "[ Configuration manuelle ]")  clear; nmtui; clear; have_net && return 0 || continue ;;
       "[ Réessayer l'Ethernet ]")    have_net && return 0 || continue ;;
     esac
 
@@ -178,6 +187,8 @@ flash(){
             "Téléchargement et écriture de HAOS $HAOS_VERSION.\nNe pas éteindre le PC." \
             9 72 0 >/dev/tty) \
       | xz -dc 2>>"$LOG" \
+      | tee >(sha256sum | cut -d' ' -f1 > /tmp/haos-img.sha256) \
+            >(wc -c > /tmp/haos-img.size) \
       | dd of="$TARGET" bs=4M conv=fsync 2>>"$LOG"
   }
   rc=$?
@@ -191,6 +202,45 @@ flash(){
       "Échec de l'installation (code $rc).\n\nDétail :\n${detail:-aucun message}\n\nJournal complet : $LOG\nUn terminal de secours va s'ouvrir." \
       22 74
     clear; exec bash
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Relecture du disque et comparaison avec l'empreinte du flux ecrit.
+# NB: xz valide deja l'integrite du TELECHARGEMENT (sommes de controle du format).
+#     Ce qui suit valide l'ECRITURE : secteur defaillant, SSD en fin de vie, etc.
+verify(){
+  local LOG=/tmp/haos-install.log
+  local expect size
+  expect=$(cat /tmp/haos-img.sha256 2>/dev/null)
+  size=$(cat /tmp/haos-img.size 2>/dev/null)
+
+  if ! [[ "$size" =~ ^[0-9]+$ ]] || [ -z "$expect" ]; then
+    whiptail --title "$TITLE" --msgbox \
+      "Empreinte de l'image non calculée : vérification impossible.\nL'installation est probablement correcte (le téléchargement\nest validé par le format compressé)." 11 68
+    return 0
+  fi
+
+  whiptail --title "$TITLE" --yesno \
+    "Vérifier que le disque a été écrit correctement ?\n\nRelecture de $(numfmt --to=iec "$size" 2>/dev/null || echo "$size octets") depuis $TARGET.\nDurée : 1 à 3 minutes selon le disque.\n\nRecommandé, surtout sur un disque ancien." \
+    14 70 || return 0
+
+  # Vider le cache : sinon on relit la RAM, pas le disque -> verification inutile
+  sync; echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+
+  local actual
+  actual=$(head -c "$size" "$TARGET" 2>>"$LOG" \
+    | pv -n -s "$size" 2> >(whiptail --title "$TITLE" --gauge \
+          "Relecture et vérification du disque..." 8 68 0 >/dev/tty) \
+    | sha256sum | cut -d' ' -f1)
+
+  if [ "$actual" = "$expect" ]; then
+    whiptail --title "$TITLE" --msgbox \
+      "Vérification réussie.\n\nLe contenu du disque correspond exactement à l'image.\n\nSHA256 : ${expect:0:32}..." 12 70
+  else
+    whiptail --title "$TITLE" --msgbox \
+      "ÉCHEC DE LA VÉRIFICATION\n\nLe disque ne correspond pas à l'image écrite :\n  attendu : ${expect:0:24}...\n  lu      : ${actual:0:24}...\n\nCauses possibles : disque défaillant, câble SATA, mémoire.\nNE PAS utiliser cette installation : recommence, et si\nl'erreur persiste, change de disque." 18 72
+    die "Vérification du disque échouée."
   fi
 }
 
@@ -219,4 +269,5 @@ setup_network
 resolve_version    # NECESSITE le reseau : doit rester apres setup_network
 pick_disk
 flash
+verify
 finalize
