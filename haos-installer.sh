@@ -48,6 +48,21 @@ setup_keyboard(){
 }
 
 # ---------------------------------------------------------------------------
+# Supprime tout profil NetworkManager associe a ce SSID (par nom, et par SSID
+# reel : le nom du profil ne correspond pas toujours au SSID).
+forget_profile(){
+  local ssid="$1" name
+  nmcli connection delete "$ssid" >/dev/null 2>&1 || true
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if [ "$(nmcli -g 802-11-wireless.ssid connection show "$name" 2>/dev/null)" = "$ssid" ]; then
+      nmcli connection delete "$name" >/dev/null 2>&1 || true
+    fi
+  done < <(nmcli -t -f NAME,TYPE connection show 2>/dev/null \
+           | awk -F: '$2 ~ /wireless/ {print $1}')
+}
+
+# ---------------------------------------------------------------------------
 setup_network(){
   have_net && return 0
   whiptail --title "$TITLE" --infobox "Recherche d'une connexion filaire (Ethernet)..." 7 62
@@ -107,6 +122,13 @@ setup_network(){
       10 66 3>&1 1>&2 2>&3) || continue
 
     whiptail --title "$TITLE" --infobox "Connexion à « $choice »..." 7 62
+
+    # PIEGE nmcli : apres un echec, un profil nomme d'apres le SSID subsiste avec
+    # le mauvais mot de passe. Un nouvel appel "dev wifi connect ... password ..."
+    # REACTIVE ce profil et IGNORE le mot de passe fourni -> la 2e tentative echoue
+    # avec l'ancien. On supprime donc tout profil existant pour ce SSID.
+    forget_profile "$choice"
+
     local err
     err=$(nmcli dev wifi connect "$choice" password "$psk" 2>&1) && have_net && return 0
     whiptail --title "$TITLE" --msgbox \
