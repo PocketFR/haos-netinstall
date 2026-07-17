@@ -44,7 +44,24 @@ setup_network(){
   whiptail --title "$TITLE" --infobox "Recherche d'une connexion filaire (Ethernet)..." 7 62
   sleep 5; have_net && return 0
 
+  # --- Diagnostic Wi-Fi : distinguer "pas de carte", "carte bloquee", "pas de reseau" ---
+  rfkill unblock all 2>/dev/null || true
   nmcli radio wifi on 2>/dev/null || true
+  sleep 2
+
+  local wifi_if
+  wifi_if=$(nmcli -t -f DEVICE,TYPE dev status 2>/dev/null | awk -F: '$2=="wifi"{print $1; exit}')
+  if [ -z "$wifi_if" ]; then
+    local diag
+    diag=$( { echo "--- Interfaces vues par le noyau ---"; ip -br link 2>/dev/null;
+              echo "--- NetworkManager ---"; nmcli dev status 2>/dev/null;
+              echo "--- Blocages radio ---"; rfkill list 2>/dev/null;
+              echo "--- Firmware manquant ? ---"; dmesg 2>/dev/null | grep -i firmware | tail -5; } \
+            | cut -c1-64 | head -22 )
+    whiptail --title "$TITLE" --msgbox \
+      "Aucune carte Wi-Fi utilisable détectée.\n\n$diag\n\nBranche un câble Ethernet, ou choisis la configuration\nmanuelle à l'écran suivant." 24 72
+  fi
+
   while true; do
     whiptail --title "$TITLE" --infobox "Recherche des réseaux Wi-Fi..." 7 62
     nmcli dev wifi rescan 2>/dev/null || true; sleep 3
@@ -55,32 +72,36 @@ setup_network(){
       menu+=("$ssid" "$(printf 'signal %3s%%   %s' "$sig" "${sec:-ouvert}")")
     done < <(nmcli -t -f SSID,SIGNAL,SECURITY dev wifi list 2>/dev/null \
              | awk -F: 'length($1) && !seen[$1]++ {print $1"\t"$2"\t"$3}')
-    menu+=("↻ Relancer le scan" "")
-    menu+=("⌨ Autre cas (SSID caché, WPA entreprise, IP fixe...)" "-> nmtui")
+
+    menu+=("[ Relancer le scan ]" "aucun réseau trouvé ? réessayer")
+    menu+=("[ Configuration manuelle ]" "SSID caché, WPA entreprise, IP fixe (nmtui)")
+    menu+=("[ Réessayer l'Ethernet ]" "câble branché entre-temps")
 
     local choice
     choice=$(whiptail --title "$TITLE" --menu \
-      "Sélectionne ton réseau Wi-Fi :" 20 72 10 "${menu[@]}" 3>&1 1>&2 2>&3) \
-      || die "Installation annulée."
+      "Sélectionne ton réseau Wi-Fi :" 20 74 10 "${menu[@]}" 3>&1 1>&2 2>&3) \
+      || { whiptail --title "$TITLE" --yesno \
+             "Quitter l'installateur ?\n\nAucun réseau n'est configuré : l'installation ne peut pas continuer sans accès à Internet." \
+             11 66 && die "Installation annulée par l'utilisateur." || continue; }
 
     case "$choice" in
-      "↻ Relancer le scan") continue ;;
-      "⌨ Autre cas"*) clear; nmtui; have_net && return 0 || continue ;;
+      "[ Relancer le scan ]")        continue ;;
+      "[ Configuration manuelle ]")  clear; nmtui; have_net && return 0 || continue ;;
+      "[ Réessayer l'Ethernet ]")    have_net && return 0 || continue ;;
     esac
 
     # NOTE: --inputbox et non --passwordbox : le mot de passe reste VISIBLE.
     # Saisie a l'aveugle + risque de mauvaise disposition clavier = trop d'echecs.
-    # La machine est en cours d'installation, personne d'autre ne lit l'ecran.
     local psk
     psk=$(whiptail --title "$TITLE" --inputbox \
       "Mot de passe du réseau « $choice » :\n(affiché en clair pour éviter les fautes de frappe)" \
       10 66 3>&1 1>&2 2>&3) || continue
 
     whiptail --title "$TITLE" --infobox "Connexion à « $choice »..." 7 62
-    if nmcli dev wifi connect "$choice" password "$psk" >/dev/null 2>&1 && have_net; then
-      return 0
-    fi
-    whiptail --title "$TITLE" --msgbox "Échec de connexion à « $choice ». Réessaie." 9 62
+    local err
+    err=$(nmcli dev wifi connect "$choice" password "$psk" 2>&1) && have_net && return 0
+    whiptail --title "$TITLE" --msgbox \
+      "Échec de connexion à « $choice ».\n\n$(echo "$err" | cut -c1-60 | head -4)\n\nVérifie le mot de passe, ou utilise la configuration manuelle." 14 68
   done
 }
 

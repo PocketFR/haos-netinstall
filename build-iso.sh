@@ -25,7 +25,7 @@ lb config \
   --debian-installer none \
   --memtest none \
   --iso-volume "HAOS Installer" \
-  --bootappend-live "boot=live components quiet toram locales=fr_FR.UTF-8 keyboard-layouts=fr timezone=Europe/Paris"
+  --bootappend-live "boot=live components toram locales=fr_FR.UTF-8 keyboard-layouts=fr timezone=Europe/Paris"
 
 # --- Paquets : firmware reseau + outils de l'assistant (voir liste) ---
 mkdir -p config/package-lists
@@ -41,6 +41,7 @@ firmware-brcm80211
 #   firmware-linux, firmware-linux-nonfree, firmware-misc-nonfree
 # --- Outils ---
 network-manager
+rfkill
 wpasupplicant
 iw
 console-setup
@@ -103,6 +104,36 @@ systemctl enable haos-installer.service
 systemctl set-default multi-user.target
 EOF
 chmod +x config/hooks/live/9000-haos.hook.chroot
+
+# --- Timeout des menus de boot ---
+# Mecanisme officiel live-build : tout repertoire present dans config/bootloaders/
+# remplace le modele de /usr/share/live/build/bootloaders/.
+#   - isolinux/syslinux : "timeout 0" signifie ATTENDRE INDEFINIMENT (piege classique),
+#     l'unite est le 1/10 s -> 10 = 1 seconde.
+#   - grub : les modeles ne definissent aucun timeout -> GRUB attend indefiniment.
+#     Sur certains ecrans (vieux portables) le menu ne s'affiche meme pas : ecran noir
+#     et l'utilisateur doit appuyer sur Entree a l'aveugle. D'ou timeout_style=hidden.
+# NB: lb config cree deja un config/bootloaders/ VIDE. Un "cp -r src dst" y creerait
+#     dst/bootloaders/ au lieu de le remplir -> on copie le CONTENU (src/.).
+mkdir -p config/bootloaders
+cp -r /usr/share/live/build/bootloaders/. config/bootloaders/
+
+for f in config/bootloaders/isolinux/isolinux.cfg \
+         config/bootloaders/syslinux/syslinux.cfg \
+         config/bootloaders/extlinux/extlinux.conf; do
+  [ -f "$f" ] && sed -i 's/^timeout 0$/timeout 10/' "$f"
+done
+
+# GRUB : injecter le timeout dans chaque .cfg du modele
+for f in config/bootloaders/grub-pc/*.cfg config/bootloaders/grub-efi/*.cfg; do
+  [ -f "$f" ] || continue
+  grep -q '^set timeout=' "$f" \
+    && sed -i 's/^set timeout=.*/set timeout=1/' "$f" \
+    || sed -i '1i set timeout=1\nset timeout_style=hidden' "$f"
+done
+
+echo ">>> Timeouts appliques :"
+grep -rn '^timeout \|^set timeout' config/bootloaders/ || echo "  (aucun - a verifier)"
 
 echo ">>> Build (accès aux miroirs Debian requis)..."
 lb build
