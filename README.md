@@ -50,7 +50,7 @@ Home Assistant — **pas** à ce dépôt.
 | | |
 |---|---|
 | Testé sur Proxmox (q35 + OVMF) | ✅ |
-| Testé sur PC physique | ⚠️ *à compléter selon vos tests* |
+| Testé sur PC physique | ✅ sur Dell Inspiron |
 | Couverture Wi-Fi | Intel, Realtek, Atheros, Broadcom uniquement |
 
 ---
@@ -70,19 +70,15 @@ Home Assistant — **pas** à ce dépôt.
 
 | Environnement | Verdict |
 |---|---|
-| **VM Debian** (sur Proxmox) | ✅ **Recommandé** — isolé, jetable, rien à nettoyer |
+| **VM Debian** | ✅ **Recommandé** — isolé, jetable, rien à nettoyer |
 | Hôte Proxmox directement | ⚠️ Techniquement possible (c'est une Debian) mais **déconseillé** : installe des paquets et laisse des montages orphelins en cas d'échec, sur l'hyperviseur de prod |
 | LXC **non privilégié** | ❌ Ne marche pas (pas de `loop`, `debootstrap` bloqué) |
 | LXC **privilégié** | ⚠️ Possible avec `nesting=1`, `fuse=1` et accès `loop` — fragile, non recommandé |
-| Ubuntu / Debian physique | ✅ Fonctionne aussi |
-
-> **Pas besoin d'une version « particulière »** de Debian/Ubuntu : n'importe quelle
-> Debian ou Ubuntu récente convient comme machine de build. La seule vraie
-> contrainte est la version de `debootstrap` (voir §2.2).
+| Debian physique | ✅ Fonctionne aussi |
 
 ### Créer la VM de build sur Proxmox
 
-Une Debian 12 ou 13 minimale suffit :
+Une Debian 13 minimale suffit :
 
 - **2 vCPU**, **4 Go RAM**
 - **20 Go de disque** (le build en consomme ~10 Go)
@@ -107,25 +103,7 @@ sudo apt update
 sudo apt install live-build
 ```
 
-### 2.2 Vérifier la compatibilité de la cible
-
-`build-iso.sh` construit une **Debian 13 (trixie)**. Le `debootstrap` de la
-machine de build doit connaître `trixie` :
-
-```bash
-ls /usr/share/debootstrap/scripts/ | grep trixie
-```
-
-- **Rien ne s'affiche** (typique sur Debian 12 / Proxmox VE 8) → deux options :
-  - Construire une **bookworm** à la place : dans `build-iso.sh`, remplacer
-    `--distribution trixie` par `--distribution bookworm`.
-  - Ou installer un `debootstrap` plus récent depuis backports.
-- **`trixie` apparaît** (Debian 13 / Proxmox VE 9) → rien à faire.
-
-> Sur Ubuntu, garder `--distribution trixie` fonctionne (`live-build` récupère
-> Debian depuis les miroirs Debian), à condition que `debootstrap` connaisse trixie.
-
-### 2.3 Lancer le build
+### 2.2 Lancer le build
 
 Placer les deux scripts dans un même dossier, puis :
 
@@ -142,7 +120,7 @@ haos-installer-iso/live-image-amd64.hybrid.iso     (~450 Mo)
 
 Le script est idempotent : il repart d'un dossier propre à chaque exécution.
 
-### 2.4 En cas de problème
+### 2.3 En cas de problème
 
 ```bash
 cd haos-installer-iso
