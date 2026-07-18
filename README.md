@@ -115,7 +115,7 @@ Si l'adresse ne répond pas, utilisez l'adresse IP affichée à l'écran du PC :
 |---|---|
 | La clé ne démarre pas | Secure Boot encore actif, ou mode Legacy/CSM au lieu d'UEFI |
 | Home Assistant ne démarre pas après l'installation | Secure Boot encore actif ; sur PC physique, mode SATA en RAID/Intel RST au lieu d'**AHCI** |
-| Wi-Fi non détecté | Puce non couverte (voir ci-dessous) — utilisez l'Ethernet |
+| Wi-Fi OK pendant l'install mais HA hors-ligne ensuite | La carte Wi-Fi n'est pas embarquée par Home Assistant OS (couverture firmware plus restreinte que l'installateur). Utilisez l'Ethernet. |
 | Installation échouée | Un journal est écrit dans `/tmp/haos-install.log` et affiché à l'écran |
 
 **Couverture Wi-Fi** : Intel, Realtek, Atheros et Broadcom. L'Ethernet reste le
@@ -267,6 +267,20 @@ réutilisable tel quel.
 - **Pas de `quiet`** — le log noyau défile volontairement, comme le fait HAOS
   lui-même : c'est le seul signe de vie pendant l'attente, et un écran exploitable
   en cas de rapport de bogue.
+- **Pré-configuration Wi-Fi (installation sans fil)** — après écriture, si
+  l'installation s'est faite en Wi-Fi, l'assistant dépose un profil NetworkManager
+  dans `CONFIG/network/my-network` de la partition `hassos-boot`, que HAOS importe
+  au premier démarrage (profil minimal, **sans `interface-name`** : ce champ,
+  copié tel quel depuis le live, verrouille le profil sur une carte inexistante
+  côté HAOS). **Limite importante :** cela ne fonctionne que si la carte Wi-Fi est
+  prise en charge par HAOS. Sa couverture firmware est plus restreinte que celle
+  de l'installateur (basé sur Debian) : une carte qui fonctionne pendant l'install
+  peut être absente sous HAOS (`Direct firmware load ... failed`). Il n'existe
+  **aucun moyen d'injecter le firmware manquant depuis l'installateur** — HAOS
+  n'utilise pas d'initrd, le pilote se charge trop tôt pour qu'un firmware déposé
+  après coup soit lu. La seule voie est de faire ajouter le firmware au paquet
+  `linux-firmware` de HAOS (en amont, à la construction de l'image). L'Ethernet
+  reste donc recommandé.
 
 ---
 

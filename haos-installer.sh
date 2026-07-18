@@ -75,7 +75,7 @@ if [ "$UI_LANG" = "fr" ]; then
   S_LOG_DETECT="Détection du support..."
   S_LOG_RETRY="Toujours rien d'inscriptible.\n\nLa clé n'est peut-être pas partitionnée, ou son format\nn'est pas reconnu. Tu peux réessayer avec une autre clé."
   S_LOG_NONE="Journal non copié.\n\nIl reste consultable dans le terminal :\n  cat %s"
-  S_WIFI_PUSH="Réseau Wi-Fi « %s » pré-configuré : Home Assistant s'y\nconnectera automatiquement au premier démarrage.\n\nGarde ce PC à portée du Wi-Fi."
+  S_WIFI_PUSH="Réseau Wi-Fi « %s » pré-configuré.\n\nHome Assistant tentera de s'y connecter au premier\ndémarrage — MAIS seulement si ta carte Wi-Fi fait partie\nde celles qu'il prend en charge (sa liste est plus\nrestreinte que celle de cet installateur).\n\nSi Home Assistant n'apparaît pas en ligne après 5 min :\n • branche un câble Ethernet (recommandé), ou\n • signale ta carte au projet Home Assistant OS.\n\nGarde ce PC à portée du Wi-Fi."
   S_WIFI_PUSH_FAIL="Le Wi-Fi n'a pas pu être pré-configuré dans l'image.\n\nHome Assistant démarrera sans réseau : il faudra le\nconnecter ensuite (câble Ethernet, ou clavier+écran sur\nla console HAOS)."
   S_DONE="Installation terminée.\n\nHome Assistant OS est installé sur %s.\n\nÀ SUIVRE, DANS CET ORDRE :\n 1. Valide ci-dessous : le PC redémarre.\n 2. Retire la clé USB DÈS QUE L'ÉCRAN S'ÉTEINT.\n    (ne la retire pas maintenant)\n 3. Garde le câble réseau branché.\n 4. Patiente 2 à 5 minutes (premier démarrage).\n 5. Depuis un autre appareil :  http://homeassistant.local:8123"
 else
@@ -130,7 +130,7 @@ else
   S_LOG_DETECT="Detecting media..."
   S_LOG_RETRY="Still nothing writable.\n\nThe stick may be unpartitioned, or its format is not\nrecognised. You can try another one."
   S_LOG_NONE="Log not copied.\n\nIt is still readable from the shell:\n  cat %s"
-  S_WIFI_PUSH="Wi-Fi network \"%s\" pre-configured: Home Assistant will\nconnect to it automatically on first boot.\n\nKeep this PC within Wi-Fi range."
+  S_WIFI_PUSH="Wi-Fi network \"%s\" pre-configured.\n\nHome Assistant will try to connect on first boot — BUT\nonly if your Wi-Fi card is among those it supports (its\nlist is narrower than this installer's).\n\nIf Home Assistant is not online after 5 min:\n • plug in an Ethernet cable (recommended), or\n • report your card to the Home Assistant OS project.\n\nKeep this PC within Wi-Fi range."
   S_WIFI_PUSH_FAIL="Wi-Fi could not be pre-configured into the image.\n\nHome Assistant will boot with no network: you will have to\nconnect it afterwards (Ethernet cable, or keyboard+screen\non the HAOS console)."
   S_DONE="Installation complete.\n\nHome Assistant OS is installed on %s.\n\nNEXT, IN THIS ORDER:\n 1. Confirm below: the PC reboots.\n 2. Remove the USB stick AS SOON AS THE SCREEN GOES BLANK.\n    (do not remove it now)\n 3. Keep the network cable plugged in.\n 4. Wait 2 to 5 minutes (first boot).\n 5. From another device:  http://homeassistant.local:8123"
 fi
@@ -339,7 +339,7 @@ setup_network(){
     forget_profile "$choice"
     local err
     if err=$(nmcli dev wifi connect "$choice" password "$psk" 2>&1) && have_net; then
-      WIFI_SSID="$choice"          # memorise pour push_wifi_config (installation Wi-Fi)
+      WIFI_SSID="$choice"; WIFI_PSK="$psk"   # memorises pour push_wifi_config
       return 0
     fi
     whiptail --title "$S_TITLE" --msgbox \
@@ -478,31 +478,47 @@ verify(){
 # de reconstruire le PSK.
 push_wifi_config(){
   [ -n "${WIFI_SSID:-}" ] || return 0          # installation filaire : rien a faire
+  [ -n "${WIFI_PSK:-}" ]  || return 1
 
-  local src part mnt=/mnt/hassos-boot ok=0
-  # Le profil keyfile ecrit par NetworkManager pour ce SSID
-  src=$(grep -rl "^ssid=$WIFI_SSID\$" /etc/NetworkManager/system-connections/ 2>>"$LOG" | head -1)
-  [ -f "$src" ] || return 1
-
+  local part mnt=/mnt/hassos-boot
   # hassos-boot = 1re partition de l'image ecrite (label hassos-boot, sinon p1)
+  partprobe "$TARGET" 2>>"$LOG" || true; sleep 1
   part=$(lsblk -nro NAME,LABEL "$TARGET" 2>/dev/null | awk '$2=="hassos-boot"{print $1; exit}')
   [ -n "$part" ] || part=$(lsblk -nro NAME "$TARGET" 2>/dev/null | sed -n '2p')
   [ -n "$part" ] || return 1
 
   mkdir -p "$mnt"
   mount "/dev/$part" "$mnt" 2>>"$LOG" || return 1
-
   mkdir -p "$mnt/CONFIG/network"
-  # Copie + durcissement : UUID4 fixe (sinon IP change a chaque boot, cf. doc HA),
-  # et fins de ligne UNIX imperatives.
-  {
-    sed -e "s/^uuid=.*/uuid=$(cat /proc/sys/kernel/random/uuid)/" "$src"
-  } | sed 's/\r$//' > "$mnt/CONFIG/network/my-network" 2>>"$LOG" && ok=1
 
-  # Pas de secret laisse en clair sur une partition FAT au-dela du necessaire :
-  chmod 600 "$mnt/CONFIG/network/my-network" 2>/dev/null || true
+  # On GENERE un keyfile minimal (modele officiel HAOS) plutot que de copier
+  # celui de nmcli : ce dernier embarque "interface-name=<carte du live>", qui
+  # verrouille le profil sur une interface INEXISTANTE cote HAOS -> jamais active.
+  # Sans interface-name, NetworkManager l'attache a n'importe quelle carte Wi-Fi.
+  # Fins de ligne UNIX (LF) imperatives ; UUID4 fixe (sinon IP change a chaque boot).
+  local hidden=""
+  nmcli -g 802-11-wireless.hidden connection show "$WIFI_SSID" 2>/dev/null | grep -qi yes \
+    && hidden="hidden=true"
+
+  {
+    printf '[connection]\n'
+    printf 'id=%s\n' "$WIFI_SSID"
+    printf 'uuid=%s\n' "$(cat /proc/sys/kernel/random/uuid)"
+    printf 'type=802-11-wireless\n\n'
+    printf '[802-11-wireless]\n'
+    printf 'mode=infrastructure\n'
+    printf 'ssid=%s\n' "$WIFI_SSID"
+    [ -n "$hidden" ] && printf '%s\n' "$hidden"
+    printf '\n[802-11-wireless-security]\n'
+    printf 'auth-alg=open\n'
+    printf 'key-mgmt=wpa-psk\n'
+    printf 'psk=%s\n\n' "$WIFI_PSK"
+    printf '[ipv4]\nmethod=auto\n\n'
+    printf '[ipv6]\naddr-gen-mode=stable-privacy\nmethod=auto\n'
+  } > "$mnt/CONFIG/network/my-network" 2>>"$LOG"
+
   sync; umount "$mnt" 2>>"$LOG" || true
-  [ "$ok" = 1 ] || return 1
+  [ -s "$mnt/CONFIG/network/my-network" ] 2>/dev/null
   return 0
 }
 
@@ -533,6 +549,7 @@ HAOS_VERSION=""
 IMG_URL=""
 TARGET=""
 WIFI_SSID=""
+WIFI_PSK=""
 live_dev=$(findmnt -no SOURCE /run/live/medium 2>/dev/null | sed -E 's,/dev/,,; s/p?[0-9]+$//' || true)
 
 set_strings                 # defauts FR, remplaces par le choix de l'ecran 1
