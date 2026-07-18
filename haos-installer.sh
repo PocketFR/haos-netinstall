@@ -75,6 +75,8 @@ if [ "$UI_LANG" = "fr" ]; then
   S_LOG_DETECT="Détection du support..."
   S_LOG_RETRY="Toujours rien d'inscriptible.\n\nLa clé n'est peut-être pas partitionnée, ou son format\nn'est pas reconnu. Tu peux réessayer avec une autre clé."
   S_LOG_NONE="Journal non copié.\n\nIl reste consultable dans le terminal :\n  cat %s"
+  S_WIFI_PUSH="Réseau Wi-Fi « %s » pré-configuré : Home Assistant s'y\nconnectera automatiquement au premier démarrage.\n\nGarde ce PC à portée du Wi-Fi."
+  S_WIFI_PUSH_FAIL="Le Wi-Fi n'a pas pu être pré-configuré dans l'image.\n\nHome Assistant démarrera sans réseau : il faudra le\nconnecter ensuite (câble Ethernet, ou clavier+écran sur\nla console HAOS)."
   S_DONE="Installation terminée.\n\nHome Assistant OS est installé sur %s.\n\nÀ SUIVRE, DANS CET ORDRE :\n 1. Valide ci-dessous : le PC redémarre.\n 2. Retire la clé USB DÈS QUE L'ÉCRAN S'ÉTEINT.\n    (ne la retire pas maintenant)\n 3. Garde le câble réseau branché.\n 4. Patiente 2 à 5 minutes (premier démarrage).\n 5. Depuis un autre appareil :  http://homeassistant.local:8123"
 else
   S_TITLE="Home Assistant OS installation"
@@ -128,6 +130,8 @@ else
   S_LOG_DETECT="Detecting media..."
   S_LOG_RETRY="Still nothing writable.\n\nThe stick may be unpartitioned, or its format is not\nrecognised. You can try another one."
   S_LOG_NONE="Log not copied.\n\nIt is still readable from the shell:\n  cat %s"
+  S_WIFI_PUSH="Wi-Fi network \"%s\" pre-configured: Home Assistant will\nconnect to it automatically on first boot.\n\nKeep this PC within Wi-Fi range."
+  S_WIFI_PUSH_FAIL="Wi-Fi could not be pre-configured into the image.\n\nHome Assistant will boot with no network: you will have to\nconnect it afterwards (Ethernet cable, or keyboard+screen\non the HAOS console)."
   S_DONE="Installation complete.\n\nHome Assistant OS is installed on %s.\n\nNEXT, IN THIS ORDER:\n 1. Confirm below: the PC reboots.\n 2. Remove the USB stick AS SOON AS THE SCREEN GOES BLANK.\n    (do not remove it now)\n 3. Keep the network cable plugged in.\n 4. Wait 2 to 5 minutes (first boot).\n 5. From another device:  http://homeassistant.local:8123"
 fi
 }
@@ -334,7 +338,10 @@ setup_network(){
     whiptail --title "$S_TITLE" --infobox "$(printf "$S_NET_CONN" "$choice")" 7 62
     forget_profile "$choice"
     local err
-    err=$(nmcli dev wifi connect "$choice" password "$psk" 2>&1) && have_net && return 0
+    if err=$(nmcli dev wifi connect "$choice" password "$psk" 2>&1) && have_net; then
+      WIFI_SSID="$choice"          # memorise pour push_wifi_config (installation Wi-Fi)
+      return 0
+    fi
     whiptail --title "$S_TITLE" --msgbox \
       "$(printf "$S_NET_FAIL" "$choice" "$(echo "$err" | cut -c1-58 | head -3)")" 14 68
   done
@@ -464,7 +471,52 @@ verify(){
 }
 
 # ---------------------------------------------------------------------------
+# Installation en Wi-Fi : HAOS oublie tout au premier boot et attend un reseau.
+# On lui depose le profil NetworkManager que l'on vient d'utiliser, dans
+# CONFIG/network/my-network de la partition hassos-boot (p1, FAT), ce que HAOS
+# importe au demarrage. On reutilise le keyfile deja cree par nmcli plutot que
+# de reconstruire le PSK.
+push_wifi_config(){
+  [ -n "${WIFI_SSID:-}" ] || return 0          # installation filaire : rien a faire
+
+  local src part mnt=/mnt/hassos-boot ok=0
+  # Le profil keyfile ecrit par NetworkManager pour ce SSID
+  src=$(grep -rl "^ssid=$WIFI_SSID\$" /etc/NetworkManager/system-connections/ 2>>"$LOG" | head -1)
+  [ -f "$src" ] || return 1
+
+  # hassos-boot = 1re partition de l'image ecrite (label hassos-boot, sinon p1)
+  part=$(lsblk -nro NAME,LABEL "$TARGET" 2>/dev/null | awk '$2=="hassos-boot"{print $1; exit}')
+  [ -n "$part" ] || part=$(lsblk -nro NAME "$TARGET" 2>/dev/null | sed -n '2p')
+  [ -n "$part" ] || return 1
+
+  mkdir -p "$mnt"
+  mount "/dev/$part" "$mnt" 2>>"$LOG" || return 1
+
+  mkdir -p "$mnt/CONFIG/network"
+  # Copie + durcissement : UUID4 fixe (sinon IP change a chaque boot, cf. doc HA),
+  # et fins de ligne UNIX imperatives.
+  {
+    sed -e "s/^uuid=.*/uuid=$(cat /proc/sys/kernel/random/uuid)/" "$src"
+  } | sed 's/\r$//' > "$mnt/CONFIG/network/my-network" 2>>"$LOG" && ok=1
+
+  # Pas de secret laisse en clair sur une partition FAT au-dela du necessaire :
+  chmod 600 "$mnt/CONFIG/network/my-network" 2>/dev/null || true
+  sync; umount "$mnt" 2>>"$LOG" || true
+  [ "$ok" = 1 ] || return 1
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 finalize(){
+  # Installation Wi-Fi : injecter le profil pour que HAOS se reconnecte seul.
+  if [ -n "${WIFI_SSID:-}" ]; then
+    if push_wifi_config; then
+      whiptail --title "$S_TITLE" --msgbox "$(printf "$S_WIFI_PUSH" "$WIFI_SSID")" 11 66
+    else
+      whiptail --title "$S_WARN" --msgbox "$S_WIFI_PUSH_FAIL" 12 68
+    fi
+  fi
+
   # L'image contient deja \EFI\BOOT\bootx64.efi ; filet pour firmwares capricieux.
   if command -v efibootmgr >/dev/null && [ -d /sys/firmware/efi ]; then
     efibootmgr --create --disk "$TARGET" --part 1 \
@@ -480,6 +532,7 @@ HAOS_FALLBACK="18.1"
 HAOS_VERSION=""
 IMG_URL=""
 TARGET=""
+WIFI_SSID=""
 live_dev=$(findmnt -no SOURCE /run/live/medium 2>/dev/null | sed -E 's,/dev/,,; s/p?[0-9]+$//' || true)
 
 set_strings                 # defauts FR, remplaces par le choix de l'ecran 1
