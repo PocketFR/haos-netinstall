@@ -535,6 +535,17 @@ finalize(){
 
   # L'image contient deja \EFI\BOOT\bootx64.efi ; filet pour firmwares capricieux.
   if command -v efibootmgr >/dev/null && [ -d /sys/firmware/efi ]; then
+    # Purger les entrees laissees par de precedentes installations sur ce
+    # meme disque (sinon efibootmgr --create en accumule une a chaque essai).
+    local partuuid bootnum
+    for partuuid in $(lsblk -no PARTUUID "$TARGET" 2>>"$LOG"); do
+      [ -n "$partuuid" ] || continue
+      while read -r bootnum; do
+        [ -n "$bootnum" ] && efibootmgr -b "$bootnum" -B >/dev/null 2>>"$LOG" || true
+      done < <(efibootmgr -v 2>/dev/null \
+        | grep -i "$partuuid" \
+        | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\).*/\1/p')
+    done
     efibootmgr --create --disk "$TARGET" --part 1 \
       --label "HAOS" --loader '\EFI\BOOT\bootx64.efi' >/dev/null 2>&1 || true
   fi
@@ -544,7 +555,7 @@ finalize(){
 }
 
 # ---------------------------------------------------------------------------
-HAOS_FALLBACK="18.1"
+HAOS_FALLBACK="18.2"
 HAOS_VERSION=""
 IMG_URL=""
 TARGET=""
