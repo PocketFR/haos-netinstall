@@ -77,7 +77,7 @@ if [ "$UI_LANG" = "fr" ]; then
   S_LOG_NONE="Journal non copié.\n\nIl reste consultable dans le terminal :\n  cat %s"
   S_WIFI_PUSH="Réseau Wi-Fi « %s » pré-configuré.\n\nHome Assistant tentera de s'y connecter au premier\ndémarrage — MAIS seulement si ta carte Wi-Fi fait partie\nde celles qu'il prend en charge (sa liste est plus\nrestreinte que celle de cet installateur).\n\nSi Home Assistant n'apparaît pas en ligne après 5 min :\n • branche un câble Ethernet (recommandé), ou\n • signale ta carte au projet Home Assistant OS.\n\nGarde ce PC à portée du Wi-Fi."
   S_WIFI_PUSH_FAIL="Le Wi-Fi n'a pas pu être pré-configuré dans l'image.\n\nHome Assistant démarrera sans réseau : il faudra le\nconnecter ensuite (câble Ethernet, ou clavier+écran sur\nla console HAOS)."
-  S_DONE="Installation terminée.\n\nHome Assistant OS est installé sur %s.\n\nÀ SUIVRE, DANS CET ORDRE :\n 1. Valide ci-dessous : le PC redémarre.\n 2. Retire la clé USB DÈS QUE L'ÉCRAN S'ÉTEINT.\n    (ne la retire pas maintenant)\n 3. Garde le câble réseau branché.\n 4. Patiente 2 à 5 minutes (premier démarrage).\n 5. Depuis un autre appareil :  http://homeassistant.local:8123"
+  S_DONE="Installation terminée.\n\nHome Assistant OS est installé sur %s.\n\nÀ SUIVRE, DANS CET ORDRE :\n 1. Valide ci-dessous : le PC redémarre.\n 2. Retire la clé USB DÈS QUE L'ÉCRAN S'ÉTEINT.\n    (ne la retire pas maintenant)\n 3. Garde le câble réseau branché.\n 4. Patiente 2 à 5 minutes (premier démarrage).\n 5. Depuis un autre appareil :  http://homeassistant.local"
 else
   S_TITLE="Home Assistant OS installation"
   S_WARN="⚠  WARNING — Home Assistant OS installation"
@@ -132,11 +132,58 @@ else
   S_LOG_NONE="Log not copied.\n\nIt is still readable from the shell:\n  cat %s"
   S_WIFI_PUSH="Wi-Fi network \"%s\" pre-configured.\n\nHome Assistant will try to connect on first boot — BUT\nonly if your Wi-Fi card is among those it supports (its\nlist is narrower than this installer's).\n\nIf Home Assistant is not online after 5 min:\n • plug in an Ethernet cable (recommended), or\n • report your card to the Home Assistant OS project.\n\nKeep this PC within Wi-Fi range."
   S_WIFI_PUSH_FAIL="Wi-Fi could not be pre-configured into the image.\n\nHome Assistant will boot with no network: you will have to\nconnect it afterwards (Ethernet cable, or keyboard+screen\non the HAOS console)."
-  S_DONE="Installation complete.\n\nHome Assistant OS is installed on %s.\n\nNEXT, IN THIS ORDER:\n 1. Confirm below: the PC reboots.\n 2. Remove the USB stick AS SOON AS THE SCREEN GOES BLANK.\n    (do not remove it now)\n 3. Keep the network cable plugged in.\n 4. Wait 2 to 5 minutes (first boot).\n 5. From another device:  http://homeassistant.local:8123"
+  S_DONE="Installation complete.\n\nHome Assistant OS is installed on %s.\n\nNEXT, IN THIS ORDER:\n 1. Confirm below: the PC reboots.\n 2. Remove the USB stick AS SOON AS THE SCREEN GOES BLANK.\n    (do not remove it now)\n 3. Keep the network cable plugged in.\n 4. Wait 2 to 5 minutes (first boot).\n 5. From another device:  http://homeassistant.local"
 fi
 }
 
-die(){ whiptail --title "$S_TITLE" --msgbox "$1$S_RESCUE" 12 72; save_log; loud_console; clear; exec bash; }
+# ---------------------------------------------------------------------------
+# whiptail ne redimensionne rien et ne fait pas defiler : un texte plus haut que
+# la boite est coupe en silence. On calcule donc la geometrie depuis le texte.
+# Les chaines portent des \n litteraux (whiptail les interprete lui-meme) : on
+# mesure sur une copie developpee, mais on passe l'original a whiptail pour ne
+# pas alterer d'eventuels antislashs venus du journal.
+wt_dims(){                                  # <texte> -> WT_H, WT_W, WT_SCROLL
+  local body line len inner lines=0 max=0 rows cols
+  body=$(printf '%b' "$1")
+  rows=$(tput lines 2>/dev/null) || rows=24
+  cols=$(tput cols  2>/dev/null) || cols=80
+  [[ "$rows" =~ ^[0-9]+$ ]] || rows=24
+  [[ "$cols" =~ ^[0-9]+$ ]] || cols=80
+
+  while IFS= read -r line; do
+    len=${#line}; (( len > max )) && max=$len
+  done <<< "$body"
+
+  WT_W=$(( max + 6 ))
+  (( WT_W < 40 ))        && WT_W=40
+  (( WT_W > cols - 4 ))  && WT_W=$(( cols - 4 ))
+
+  inner=$(( WT_W - 4 )); (( inner < 1 )) && inner=1
+  while IFS= read -r line; do
+    len=${#line}
+    (( len < 1 )) && len=1                  # une ligne vide occupe quand meme 1 ligne
+    lines=$(( lines + (len + inner - 1) / inner ))
+  done <<< "$body"
+
+  WT_SCROLL=""
+  WT_H=$(( lines + 7 ))                     # marge de la convention du script
+  if (( WT_H > rows - 2 )); then            # trop haut pour l'ecran -> ascenseur
+    WT_H=$(( rows - 2 )); WT_SCROLL="--scrolltext"
+  fi
+}
+
+wt_msg(){                                   # <titre> <texte>
+  wt_dims "$2"
+  whiptail --title "$1" $WT_SCROLL --msgbox "$2" "$WT_H" "$WT_W"
+}
+
+wt_yesno(){                                 # <titre> <texte> [args whiptail...]
+  local title="$1" text="$2"; shift 2
+  wt_dims "$text"
+  whiptail --title "$title" $WT_SCROLL "$@" --yesno "$text" "$WT_H" "$WT_W"
+}
+
+die(){ wt_msg "$S_TITLE" "$1$S_RESCUE"; save_log; loud_console; clear; exec bash; }
 
 # ---------------------------------------------------------------------------
 # ECRAN 1 : langue + clavier en une question.
@@ -171,8 +218,8 @@ apply_keymap(){
   out="$out"$'\n'"$(loadkeys "$km" 2>&1)" && return 0
 
   # Ne plus echouer en silence : c'est ce qui a masque le bug precedent.
-  whiptail --title "$S_TITLE" --msgbox \
-    "Keyboard layout could not be applied / La disposition n'a pas pu être appliquée :\n\n$(echo "$out" | cut -c1-64 | head -6)\n\nQWERTY/AZERTY may be wrong. Use the manual config if needed." 15 72
+  wt_msg "$S_TITLE" \
+    "Keyboard layout could not be applied / La disposition n'a pas pu être appliquée :\n\n$(echo "$out" | cut -c1-64 | head -6)\n\nQWERTY/AZERTY may be wrong. Use the manual config if needed."
   return 1
 }
 
@@ -250,24 +297,24 @@ try_write_log(){
 save_log(){
   local dest
   [ -s "$LOG" ] || return 0
-  whiptail --title "$S_TITLE" --yesno "$S_LOG_ASK" 11 68 || return 0
+  wt_yesno "$S_TITLE" "$S_LOG_ASK" || return 0
 
   if dest=$(try_write_log "$LOG"); then
-    whiptail --title "$S_TITLE" --msgbox "$(printf "$S_LOG_OK" "$dest")" 10 64; return 0
+    wt_msg "$S_TITLE" "$(printf "$S_LOG_OK" "$dest")"; return 0
   fi
 
   while true; do
-    whiptail --title "$S_TITLE" --yesno \
-      --yes-button "$S_LOG_PLUGGED" --no-button "$S_LOG_ABORT" "$S_LOG_PLUG" 13 70 || break
+    wt_yesno "$S_TITLE" "$S_LOG_PLUG" \
+      --yes-button "$S_LOG_PLUGGED" --no-button "$S_LOG_ABORT" || break
     whiptail --title "$S_TITLE" --infobox "$S_LOG_DETECT" 7 62
     udevadm settle 2>/dev/null || sleep 3
     partprobe 2>/dev/null || true; sleep 1
     if dest=$(try_write_log "$LOG"); then
-      whiptail --title "$S_TITLE" --msgbox "$(printf "$S_LOG_OK" "$dest")" 10 64; return 0
+      wt_msg "$S_TITLE" "$(printf "$S_LOG_OK" "$dest")"; return 0
     fi
-    whiptail --title "$S_TITLE" --msgbox "$S_LOG_RETRY" 12 68
+    wt_msg "$S_TITLE" "$S_LOG_RETRY"
   done
-  whiptail --title "$S_TITLE" --msgbox "$(printf "$S_LOG_NONE" "$LOG")" 11 66
+  wt_msg "$S_TITLE" "$(printf "$S_LOG_NONE" "$LOG")"
 }
 
 # ---------------------------------------------------------------------------
@@ -302,7 +349,7 @@ setup_network(){
     diag=$( { ip -br link 2>/dev/null; nmcli dev status 2>/dev/null;
               rfkill list 2>/dev/null; dmesg 2>/dev/null | grep -i firmware | tail -4; } \
             | cut -c1-62 | head -18 )
-    whiptail --title "$S_TITLE" --msgbox "$(printf "$S_NET_NOWIFI" "$diag")" 24 70
+    wt_msg "$S_TITLE" "$(printf "$S_NET_NOWIFI" "$diag")"
   fi
 
   while true; do
@@ -322,7 +369,7 @@ setup_network(){
 
     local choice
     choice=$(whiptail --title "$S_TITLE" --menu "$S_NET_PICK" 20 74 10 "${menu[@]}" 3>&1 1>&2 2>&3) \
-      || { whiptail --title "$S_TITLE" --yesno "$S_NET_QUIT" 11 66 && die "$S_CANCELLED" || continue; }
+      || { wt_yesno "$S_TITLE" "$S_NET_QUIT" && die "$S_CANCELLED" || continue; }
 
     case "$choice" in
       "$S_NET_RESCAN")    continue ;;
@@ -342,8 +389,8 @@ setup_network(){
       WIFI_SSID="$choice"; WIFI_PSK="$psk"   # memorises pour push_wifi_config
       return 0
     fi
-    whiptail --title "$S_TITLE" --msgbox \
-      "$(printf "$S_NET_FAIL" "$choice" "$(echo "$err" | cut -c1-58 | head -3)")" 14 68
+    wt_msg "$S_TITLE" \
+      "$(printf "$S_NET_FAIL" "$choice" "$(echo "$err" | cut -c1-58 | head -3)")"
   done
 }
 
@@ -358,7 +405,7 @@ resolve_version(){
 
   if [ -z "$HAOS_VERSION" ]; then
     HAOS_VERSION="$HAOS_FALLBACK"
-    whiptail --title "$S_TITLE" --yesno "$(printf "$S_VER_FAIL" "$HAOS_VERSION")" 15 70 \
+    wt_yesno "$S_TITLE" "$(printf "$S_VER_FAIL" "$HAOS_VERSION")" \
       || die "$S_CANCELLED"
   fi
 
@@ -394,13 +441,13 @@ pick_disk(){
   bytes=$(blockdev --getsize64 "$TARGET" 2>/dev/null || echo 0)
   gb=$(( bytes / 1000000000 ))
   if [ "$gb" -lt 32 ]; then
-    whiptail --title "$S_WARN" --yesno --yes-button "$S_STOP" --no-button "$S_GOON" \
-      "$(printf "$S_DISK_SMALL" "$TARGET" "$gb")" 15 70 && die "$S_STOPPED"
+    wt_yesno "$S_WARN" "$(printf "$S_DISK_SMALL" "$TARGET" "$gb")" \
+      --yes-button "$S_STOP" --no-button "$S_GOON" && die "$S_STOPPED"
   fi
 
   local content
   content=$(lsblk -no NAME,SIZE,FSTYPE,LABEL "$TARGET" 2>/dev/null | sed 's/^/   /')
-  whiptail --title "$S_CONFIRM_T" --yesno "$(printf "$S_DISK_CONFIRM" "$TARGET" "$content")" 20 78 \
+  wt_yesno "$S_CONFIRM_T" "$(printf "$S_DISK_CONFIRM" "$TARGET" "$content")" \
     || die "$S_CANCELLED"
 }
 
@@ -447,12 +494,12 @@ verify(){
   size=$(cat /tmp/haos-img.size 2>/dev/null)
 
   if ! [[ "$size" =~ ^[0-9]+$ ]] || [ -z "$expect" ]; then
-    whiptail --title "$S_TITLE" --msgbox "$S_VFY_SKIP" 11 68; return 0
+    wt_msg "$S_TITLE" "$S_VFY_SKIP"; return 0
   fi
 
-  whiptail --title "$S_TITLE" --yesno \
+  wt_yesno "$S_TITLE" \
     "$(printf "$S_VFY_ASK" "$(numfmt --to=iec "$size" 2>/dev/null || echo "$size")" "$TARGET")" \
-    14 70 || return 0
+    || return 0
 
   # Vider le cache : sinon on relit la RAM, pas le disque -> verification inutile.
   sync; echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
@@ -462,10 +509,10 @@ verify(){
     | sha256sum | cut -d' ' -f1)
 
   if [ "$actual" = "$expect" ]; then
-    whiptail --title "$S_TITLE" --msgbox "$(printf "$S_VFY_OK" "${expect:0:32}")" 12 70
+    wt_msg "$S_TITLE" "$(printf "$S_VFY_OK" "${expect:0:32}")"
   else
-    whiptail --title "$S_WARN" --msgbox \
-      "$(printf "$S_VFY_KO" "${expect:0:24}" "${actual:0:24}")" 18 72
+    wt_msg "$S_WARN" \
+      "$(printf "$S_VFY_KO" "${expect:0:24}" "${actual:0:24}")"
     die "$S_CANCELLED"
   fi
 }
@@ -527,9 +574,9 @@ finalize(){
   # Installation Wi-Fi : injecter le profil pour que HAOS se reconnecte seul.
   if [ -n "${WIFI_SSID:-}" ]; then
     if push_wifi_config; then
-      whiptail --title "$S_TITLE" --msgbox "$(printf "$S_WIFI_PUSH" "$WIFI_SSID")" 11 66
+      wt_msg "$S_TITLE" "$(printf "$S_WIFI_PUSH" "$WIFI_SSID")"
     else
-      whiptail --title "$S_WARN" --msgbox "$S_WIFI_PUSH_FAIL" 12 68
+      wt_msg "$S_WARN" "$S_WIFI_PUSH_FAIL"
     fi
   fi
 
@@ -550,7 +597,7 @@ finalize(){
       --label "HAOS" --loader '\EFI\BOOT\bootx64.efi' >/dev/null 2>&1 || true
   fi
   # Le live tourne depuis la cle : la retirer avant le reboot = I/O errors.
-  whiptail --title "$S_TITLE" --msgbox "$(printf "$S_DONE" "$TARGET")" 19 74
+  wt_msg "$S_TITLE" "$(printf "$S_DONE" "$TARGET")"
   clear; reboot
 }
 
@@ -565,8 +612,8 @@ live_dev=$(findmnt -no SOURCE /run/live/medium 2>/dev/null | sed -E 's,/dev/,,; 
 
 set_strings                 # defauts FR, remplaces par le choix de l'ecran 1
 choose_lang_keyboard
-whiptail --title "$S_TITLE" --msgbox \
-  "$(printf "$S_WELCOME" "$(boot_status)" "$(secureboot_status)")" 22 74
+wt_msg "$S_TITLE" \
+  "$(printf "$S_WELCOME" "$(boot_status)" "$(secureboot_status)")"
 setup_network
 resolve_version             # NECESSITE le reseau : doit rester apres setup_network
 pick_disk
