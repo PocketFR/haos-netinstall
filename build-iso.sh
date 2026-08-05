@@ -16,7 +16,24 @@ WORK="haos-installer-iso"
 SRC="$(pwd)/haos-installer.sh"
 rm -rf "$WORK"; mkdir -p "$WORK"; cd "$WORK"
 
+# L'amorcage BIOS ne vient aujourd'hui que du DEFAUT de live-build (syslinux) :
+# rien ne le fige, une evolution amont pourrait le retirer sans erreur. On le
+# demande donc explicitement -- mais seulement si l'option existe, car elle est
+# absente de certaines versions (cf. la note en tete de fichier : echec Ubuntu).
+BOOTLOADERS_OPT=()
+if lb config --help 2>&1 | grep -q -- '--bootloaders'; then
+  BOOTLOADERS_OPT=(--bootloaders syslinux,grub-efi)
+  echo ">>> --bootloaders supporte : amorcage BIOS+UEFI fige explicitement."
+else
+  echo ">>> --bootloaders absent de cette version de live-build : defaut conserve."
+fi
+
+# --iso-volume : le LABEL "HAOS Installer" est PARTAGE avec haos-installer.sh
+# (constante ISO_LABEL). L'installateur s'en sert pour reconnaitre le media de
+# boot et l'exclure des disques cibles -- 'toram' remplacant /run/live/medium par
+# un tmpfs, c'est le seul moyen fiable de l'identifier. Garder les deux en phase.
 lb config \
+  ${BOOTLOADERS_OPT[@]+"${BOOTLOADERS_OPT[@]}"} \
   --distribution trixie \
   --architecture amd64 \
   --binary-images iso-hybrid \
@@ -145,8 +162,47 @@ echo ">>> Build (accès aux miroirs Debian requis)..."
 lb build
 
 ISO=$(ls -1 live-image-*.iso 2>/dev/null | head -1)
-if [ -n "$ISO" ]; then
-  echo ">>> ISO : $ISO  ($(du -h "$ISO" | cut -f1))"
+[ -n "$ISO" ] || { echo ">>> ISO : échec"; exit 1; }
+
+# --- Partition dediee aux journaux d'installation ---
+# L'ESP de l'ISO gravee ne laisse que ~4 Ko libres : trop juste pour y deposer un
+# journal. On ajoute donc une 3e partition FAT16, que l'installateur retrouve par
+# son LABEL -> destination deterministe, sans heuristique RM/HOTPLUG qui pourrait
+# selectionner un disque interne.
+# LABEL en majuscules sans espace : 11 octets max en FAT et casse traitee
+# inegalement selon les outils, or on le compare par programme.
+# FAT16 et non FAT32 : ce dernier est mal a l'aise sous 32 Mo.
+# xorriso et non "cat + sfdisk" : ajouter des donnees en fin d'image deplace la
+# GPT de secours, dont xorriso tient la comptabilite a jour.
+# NB: sous Ventoy (ISO monte en boucle) et Rufus en mode ISO, cette partition
+#     n'apparaitra pas -> l'installateur garde ses replis.
+LOGS_LABEL="HAOS_LOGS"
+if command -v mkfs.vfat >/dev/null && command -v xorriso >/dev/null; then
+  echo ">>> Ajout de la partition $LOGS_LABEL..."
+  rm -f haos-logs.img
+  truncate -s 16M haos-logs.img
+  mkfs.vfat -F 16 -n "$LOGS_LABEL" haos-logs.img >/dev/null
+
+  # 0x0e = FAT16 LBA. "-boot_image any replay" rejoue la configuration d'amorcage
+  # de l'ISO source : sans lui, l'image de sortie ne serait plus amorcable.
+  # Sortie capturee (et non tubee vers tail) : un tube ferait porter le statut du
+  # 'if' sur tail et non sur xorriso.
+  xorriso_out=""
+  if xorriso_out=$(xorriso -indev "$ISO" -outdev "$ISO.new" \
+       -boot_image any replay \
+       -append_partition 3 0x0e haos-logs.img 2>&1); then
+    mv -f "$ISO.new" "$ISO"
+    echo ">>> Partition $LOGS_LABEL ajoutee."
+  else
+    rm -f "$ISO.new"
+    echo ">>> ATTENTION: ajout de $LOGS_LABEL echoue, ISO conservee sans elle."
+    echo "$xorriso_out" | tail -10
+  fi
+  rm -f haos-logs.img
 else
-  echo ">>> ISO : échec"; exit 1
+  echo ">>> ATTENTION: mkfs.vfat ou xorriso absent -> pas de partition $LOGS_LABEL."
 fi
+
+echo ">>> ISO : $ISO  ($(du -h "$ISO" | cut -f1))"
+echo ">>> Partitions :"
+fdisk -l "$ISO" 2>/dev/null | tail -6 || true

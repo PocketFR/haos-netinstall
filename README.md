@@ -91,8 +91,9 @@ Branchez la clé, démarrez. L'assistant se lance tout seul :
 4. **Choix du disque** — vérifiez la taille et le modèle ; le contenu actuel est
    affiché avant confirmation
 5. Téléchargement et écriture (barre de progression) — **ne pas éteindre le PC**
-6. Valider : le PC redémarre. **Retirez la clé USB dès que l'écran s'éteint**
-   (pas avant : le système d'installation tourne depuis la clé)
+6. **Retirez la clé USB**, puis validez : le PC redémarre directement sur Home
+   Assistant. L'installateur est chargé en mémoire, la clé ne sert plus à rien
+   à cette étape.
 
 Des lignes de texte défilent au démarrage : c'est normal, ce n'est pas planté.
 
@@ -120,10 +121,23 @@ Si l'adresse ne répond pas, utilisez l'adresse IP affichée à l'écran du PC :
 | La clé ne démarre pas | Secure Boot encore actif, ou mode Legacy/CSM au lieu d'UEFI |
 | Home Assistant ne démarre pas après l'installation | Secure Boot encore actif ; sur PC physique, mode SATA en RAID/Intel RST au lieu d'**AHCI** |
 | Wi-Fi OK pendant l'install mais HA hors-ligne ensuite | La carte Wi-Fi n'est pas embarquée par Home Assistant OS (couverture firmware plus restreinte que l'installateur). Utilisez l'Ethernet. |
-| Installation échouée | Un journal est écrit dans `/tmp/haos-install.log` et affiché à l'écran |
+| Installation échouée | Un journal est écrit dans `/tmp/haos-install.log`, copié sur la partition `HAOS_LOGS` de la clé, et affichable à l'écran |
 
 **Couverture Wi-Fi** : Intel, Realtek, Atheros et Broadcom. L'Ethernet reste le
-chemin fiable.
+chemin fiable. Le journal d'installation indique le pilote exact de votre carte
+et le `key-mgmt` utilisé : c'est ce qu'il faut regarder si Home Assistant reste
+hors-ligne.
+
+**Report du Wi-Fi vers Home Assistant** — l'assistant copie dans l'image le
+profil réseau que vous venez d'utiliser, y compris s'il a été créé par la
+configuration manuelle (`nmtui`) : SSID caché, IP fixe et WPA3 sont donc
+repris tels quels. Deux exceptions, signalées à l'écran plutôt que passées sous
+silence : un réseau **d'entreprise à certificats** (802.1X avec fichiers de
+certificats) n'est pas reportable, ces fichiers n'existant pas dans Home
+Assistant ; et un profil dont le mot de passe n'est pas stocké dans le fichier
+ne peut pas l'être non plus. Dans ces cas rien n'est écrit — mieux vaut cela
+qu'un réseau qui ne monte jamais — et la configuration se fait ensuite depuis la
+console de Home Assistant, ou par câble Ethernet.
 
 ### Statut des tests
 
@@ -232,9 +246,11 @@ Le **Wi-Fi**, lui, exige une machine physique.
 (`version.home-assistant.io/stable.json`, clé `hassos` de la carte
 `generic-x86-64`). C'est la même source que le Supervisor : elle reflète les
 rétrogradations de canal, contrairement à l'API GitHub qui sert de repli si
-elle est injoignable. En dernier recours, la constante `HAOS_FALLBACK` en tête
-de script est proposée après confirmation — pensez à la rafraîchir de temps en
-temps, elle vieillit en silence.
+elle est injoignable. Si les deux échouent, l'installation s'arrête sur une
+erreur explicite : aucune version n'est codée en dur. C'est délibéré — une
+constante de repli n'aiderait que si les deux sources étaient injoignables
+*alors que* le téléchargement de l'image fonctionne, et il faudrait la
+rafraîchir à chaque version de HAOS.
 
 **Figer une version de HAOS** — remplacer le corps de `resolve_version()` par
 un `HAOS_VERSION` en dur ; `IMG_URL` s'en déduit automatiquement.
@@ -252,10 +268,50 @@ réutilisable tel quel.
   complète (GPT + partitions système A/B), pas un ensemble de paquets. `d-i` sait
   partitionner et installer une Debian, pas écrire une image brute. D'où le choix
   d'un live minimal + assistant maison.
-- **Pourquoi pas Hyper-V / VirtualBox ?** Home Assistant fournit des images
-  **dédiées** à ces hyperviseurs (build `haos_ova` : `.vhdx`, `.vdi`, `.qcow2`).
-  Cet ISO écrit l'image `generic-x86-64`, prévue pour le bare-metal. Utilisez
-  l'artefact officiel de votre hyperviseur.
+- **Pourquoi pas en machine virtuelle ?** Home Assistant fournit des images
+  **dédiées** aux hyperviseurs (build `haos_ova` : `.qcow2`, `.vmdk`, `.vhdx`,
+  `.vdi`, `.ova`). Cet ISO écrit l'image `generic-x86-64`, prévue pour le
+  bare-metal. Utilisez l'artefact officiel de votre hyperviseur.
+  Cas particulier fréquent : un hyperviseur qui n'accepte que des ISO **à la
+  création** d'une VM — Synology VMM, typiquement. La restriction ne vaut que
+  pour la création : à l'**import**, VMM accepte les images disque
+  (`.img`, `.vmdk`, `.vdi`, `.vhd`, `.vhdx`, `.qcow2`). Importez donc
+  `haos_ova-*` plutôt que de passer par un installateur.
+- **Matériel sans UEFI** — HAOS impose UEFI et GPT : c'est une contrainte de
+  l'image officielle, pas de cet ISO. Sur une machine qui ne sait démarrer
+  qu'en Legacy/CSM, aucune installation de HAOS n'est possible. La seule
+  alternative est une installation *Supervised* sur Debian, méthode nettement
+  moins supportée par Home Assistant (bandeau « unsupported » dès que l'OS
+  dévie, maintenance du système à votre charge).
+- **Mac Apple Silicon — ne pas essayer.** Ces machines n'ont pas d'UEFI (chaîne
+  iBoot propre à Apple), leur SSD interne n'est pas un NVMe standard, et le
+  noyau de HAOS n'embarque aucun pilote Apple Silicon. Surtout : effacer
+  intégralement le disque ôte au Mac sa capacité à démarrer quoi que ce soit,
+  la récupération passant par un restore en DFU depuis un autre Mac. Pour
+  faire tourner HAOS sur un Mac ARM, utilisez une VM (UTM) et l'image
+  `haos_generic-aarch64` — sans cet ISO, qui est amd64.
+- **Journal d'installation** — l'ISO embarque une petite partition FAT
+  étiquetée `HAOS_LOGS` qui reçoit le journal, que l'installation ait réussi ou
+  échoué. En cas de succès la copie est **silencieuse** : aucun écran de plus,
+  le journal est simplement là si vous en avez besoin. Le journal trace les
+  décisions (version retenue et sa source, disque cible, résultat de la
+  vérification, état UEFI/Secure Boot) et ne contient jamais le mot de passe
+  Wi-Fi. Cette partition existe parce que l'ESP de la clé ne laisse que ~10 Ko
+  libres, très insuffisant.
+  Elle n'apparaît que si la clé a été écrite en mode brut (`dd`, Etcher, Rufus
+  en mode DD) : sous Ventoy ou Rufus en mode ISO, l'ISO est montée en boucle et
+  la partition ne devient jamais un périphérique. Sur un échec, l'assistant
+  propose alors de brancher une autre clé, puis d'afficher le journal à l'écran
+  pour le photographier.
+
+  > **Windows 11 ne montera pas cette partition tout seul.** Il n'expose que la
+  > **première** partition d'un support amovible — Windows 10 savait en gérer
+  > plusieurs depuis la Creators Update, Windows 11 est revenu en arrière. Il
+  > faut donc lui attribuer une lettre dans *Gestion des disques*
+  > (`diskmgmt.msc`). Linux et macOS la montent directement.
+  > Ce n'est pas contournable côté ISO : la première partition doit contenir le
+  > système de fichiers ISO9660 pour l'amorçage BIOS, les journaux ne peuvent
+  > donc pas y être placés.
 - **Partition de données** — inutile de l'agrandir : HAOS étend automatiquement
   sa partition `hassos-data` à la taille du disque au premier démarrage.
 - **Effacement préalable** — l'assistant vide les signatures et les tables GPT

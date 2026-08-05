@@ -33,11 +33,15 @@ jobs:
           bash -n build-iso.sh
           bash -n haos-installer.sh
           apt-get update && apt-get install -y shellcheck
+          # Bloquant sur les ERREURS uniquement : les avertissements restent
+          # informatifs pour ne pas casser le build sur du style.
           shellcheck -S warning build-iso.sh haos-installer.sh || true
+          shellcheck -S error build-iso.sh haos-installer.sh
 
       - name: Installer live-build
         run: |
-          apt-get install -y live-build debootstrap fdisk sudo libarchive-tools xorriso
+          # dosfstools : mkfs.vfat, pour la partition HAOS_LOGS ajoutee a l'ISO.
+          apt-get install -y live-build debootstrap fdisk sudo libarchive-tools xorriso dosfstools
           apt-get install -y p7zip-full || true   # absent de certaines versions Debian
           lb --version
           echo "--- debootstrap connait-il la cible ? ---"
@@ -78,6 +82,23 @@ jobs:
           echo "$LIST" | grep -qi 'bootx64.efi' \
             || { echo "ERREUR: /EFI/boot/bootx64.efi introuvable dans l'ISO"; exit 1; }
           echo "OK: ISO UEFI-conforme (ESP + bootx64.efi)"
+
+          # 3) Partition des journaux ajoutee apres le build (voir build-iso.sh).
+          #    Non bloquant : l'ISO reste utilisable sans elle, l'installateur
+          #    dispose de replis. On veut juste le voir dans les logs de build.
+          if fdisk -l "$ISO" | grep -qi 'FAT16'; then
+            echo "OK: partition de journaux presente"
+          else
+            echo "ATTENTION: partition de journaux absente de l'ISO"
+          fi
+          fdisk -l "$ISO" | tail -6
+
+          # 4) Amorcage BIOS : l'entree El Torito n'est produite que par le defaut
+          #    de live-build (--bootloaders n'est pas passe). On la verifie pour
+          #    qu'une evolution de live-build ne la fasse pas disparaitre en silence.
+          if command -v xorriso >/dev/null; then
+            xorriso -indev "$ISO" -report_el_torito plain 2>/dev/null | head -20 || true
+          fi
 
       - name: Renommer et calculer le SHA256
         id: iso

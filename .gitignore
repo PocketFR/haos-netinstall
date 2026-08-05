@@ -1,3 +1,4 @@
 haos-installer-iso/
 *.iso
 *.sha256
+iso/
