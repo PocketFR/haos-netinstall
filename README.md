@@ -103,11 +103,11 @@ finalise son installation, l'écran peut sembler figé. Puis, depuis un autre
 appareil du même réseau :
 
 ```
-http://homeassistant.local:8123
+http://homeassistant.local
 ```
 
 Si l'adresse ne répond pas, utilisez l'adresse IP affichée à l'écran du PC :
-`http://<adresse-ip>:8123`
+`http://<adresse-ip>`
 
 ## En cas de problème
 
