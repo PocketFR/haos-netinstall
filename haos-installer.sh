@@ -398,10 +398,26 @@ setup_network(){
 # NECESSITE le reseau : en Wi-Fi, rien n'est joignable avant setup_network.
 resolve_version(){
   whiptail --title "$S_TITLE" --infobox "$S_VER_FETCH" 7 66
-  HAOS_VERSION=$(curl -fsSL --max-time 15 \
-    https://api.github.com/repos/home-assistant/operating-system/releases/latest \
-    2>>"$LOG" | grep -oP '"tag_name":\s*"\K[^"]+' || true)
-  # NB: /releases/latest exclut les pre-releases (RC) par construction.
+
+  # Source de verite : le canal stable du Supervisor. L'API GitHub ignore les
+  # retrogradations de canal (une release stable peut etre retiree apres coup,
+  # cf. HAOS 18.0 et le firmware RPi/Yellow) et proposerait alors une version
+  # que Home Assistant ne considere plus courante.
+  # jq et non grep : la cle de la carte existe AUSSI sous "homeassistant"
+  # (version de HA Core) -> un grep renverrait cette valeur-la.
+  HAOS_VERSION=$(curl -fsSL --max-time 15 https://version.home-assistant.io/stable.json 2>>"$LOG" \
+    | jq -r --arg b "$HAOS_BOARD" '.hassos[$b] // empty' 2>>"$LOG" || true)
+  [[ "$HAOS_VERSION" =~ ^[0-9]+(\.[0-9]+)+$ ]] || HAOS_VERSION=""
+
+  # Repli : l'API GitHub, qui exclut les pre-releases (RC) par construction.
+  # Volontairement laisse en grep : si jq disparaissait de la liste de paquets,
+  # l'etape precedente rendrait vide et ce chemin resterait fonctionnel.
+  if [ -z "$HAOS_VERSION" ]; then
+    HAOS_VERSION=$(curl -fsSL --max-time 15 \
+      https://api.github.com/repos/home-assistant/operating-system/releases/latest \
+      2>>"$LOG" | grep -oP '"tag_name":\s*"\K[^"]+' || true)
+    [[ "$HAOS_VERSION" =~ ^[0-9]+(\.[0-9]+)+$ ]] || HAOS_VERSION=""
+  fi
 
   if [ -z "$HAOS_VERSION" ]; then
     HAOS_VERSION="$HAOS_FALLBACK"
@@ -409,7 +425,7 @@ resolve_version(){
       || die "$S_CANCELLED"
   fi
 
-  IMG_URL="https://github.com/home-assistant/operating-system/releases/download/${HAOS_VERSION}/haos_generic-x86-64-${HAOS_VERSION}.img.xz"
+  IMG_URL="https://github.com/home-assistant/operating-system/releases/download/${HAOS_VERSION}/haos_${HAOS_BOARD}-${HAOS_VERSION}.img.xz"
   curl -fsI --max-time 15 "$IMG_URL" >/dev/null 2>>"$LOG" \
     || die "$(printf "$S_VER_NOIMG" "$HAOS_VERSION" "$IMG_URL")"
 }
@@ -602,7 +618,8 @@ finalize(){
 }
 
 # ---------------------------------------------------------------------------
-HAOS_FALLBACK="18.2"
+HAOS_BOARD="generic-x86-64"   # cle du canal stable ET nom de l'image : gardes en phase
+HAOS_FALLBACK="18.2"          # dernier recours si les deux sources sont injoignables
 HAOS_VERSION=""
 IMG_URL=""
 TARGET=""

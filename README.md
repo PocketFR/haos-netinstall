@@ -109,6 +109,10 @@ http://homeassistant.local
 Si l'adresse ne répond pas, utilisez l'adresse IP affichée à l'écran du PC :
 `http://<adresse-ip>`
 
+> Depuis Home Assistant Core 2026.8, les nouvelles installations écoutent sur le
+> port 80 et non plus sur 8123. Si votre installation date d'avant, ajoutez
+> `:8123` à l'adresse.
+
 ## En cas de problème
 
 | Symptôme | Cause probable |
@@ -223,9 +227,17 @@ Le **Wi-Fi**, lui, exige une machine physique.
 
 ## 4. Personnalisation
 
-**Figer une version de HAOS** — `haos-installer.sh` interroge l'API GitHub après
-la configuration réseau. Pour figer, remplacer le corps de `resolve_version()`
-par un `HAOS_VERSION` en dur et l'`IMG_URL` correspondante.
+**Résolution de la version** — après la configuration réseau,
+`resolve_version()` interroge le canal stable de Home Assistant
+(`version.home-assistant.io/stable.json`, clé `hassos` de la carte
+`generic-x86-64`). C'est la même source que le Supervisor : elle reflète les
+rétrogradations de canal, contrairement à l'API GitHub qui sert de repli si
+elle est injoignable. En dernier recours, la constante `HAOS_FALLBACK` en tête
+de script est proposée après confirmation — pensez à la rafraîchir de temps en
+temps, elle vieillit en silence.
+
+**Figer une version de HAOS** — remplacer le corps de `resolve_version()` par
+un `HAOS_VERSION` en dur ; `IMG_URL` s'en déduit automatiquement.
 
 **Ajouter des paquets** — bloc `config/package-lists/haos.list.chroot` de
 `build-iso.sh`. Chaque paquet alourdit l'ISO.

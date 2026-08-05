@@ -49,6 +49,9 @@ kbd
 whiptail
 pv
 curl
+# jq : lecture du canal stable (version.home-assistant.io/stable.json), ou la
+# cle de la carte apparait sous deux sections -> un grep renverrait la mauvaise.
+jq
 xz-utils
 util-linux
 efibootmgr
