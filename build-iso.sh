@@ -75,6 +75,11 @@ efibootmgr
 mokutil
 dosfstools
 parted
+# Pour ecrire le journal sur la cle de secours de l'utilisateur : sans ces
+# paquets, une cle en exFAT ou NTFS (le cas de la plupart des cles > 32 Go, et le
+# format par defaut de Ventoy) n'est pas montable du tout.
+exfatprogs
+ntfs-3g
 EOF
 # --- Assistant guidé ---
 mkdir -p config/includes.chroot/usr/local/bin
@@ -164,45 +169,14 @@ lb build
 ISO=$(ls -1 live-image-*.iso 2>/dev/null | head -1)
 [ -n "$ISO" ] || { echo ">>> ISO : échec"; exit 1; }
 
-# --- Partition dediee aux journaux d'installation ---
-# L'ESP de l'ISO gravee ne laisse que ~4 Ko libres : trop juste pour y deposer un
-# journal. On ajoute donc une 3e partition FAT16, que l'installateur retrouve par
-# son LABEL -> destination deterministe, sans heuristique RM/HOTPLUG qui pourrait
-# selectionner un disque interne.
-# LABEL en majuscules sans espace : 11 octets max en FAT et casse traitee
-# inegalement selon les outils, or on le compare par programme.
-# FAT16 et non FAT32 : ce dernier est mal a l'aise sous 32 Mo.
-# xorriso et non "cat + sfdisk" : ajouter des donnees en fin d'image deplace la
-# GPT de secours, dont xorriso tient la comptabilite a jour.
-# NB: sous Ventoy (ISO monte en boucle) et Rufus en mode ISO, cette partition
-#     n'apparaitra pas -> l'installateur garde ses replis.
-LOGS_LABEL="HAOS_LOGS"
-if command -v mkfs.vfat >/dev/null && command -v xorriso >/dev/null; then
-  echo ">>> Ajout de la partition $LOGS_LABEL..."
-  rm -f haos-logs.img
-  truncate -s 16M haos-logs.img
-  mkfs.vfat -F 16 -n "$LOGS_LABEL" haos-logs.img >/dev/null
-
-  # 0x0e = FAT16 LBA. "-boot_image any replay" rejoue la configuration d'amorcage
-  # de l'ISO source : sans lui, l'image de sortie ne serait plus amorcable.
-  # Sortie capturee (et non tubee vers tail) : un tube ferait porter le statut du
-  # 'if' sur tail et non sur xorriso.
-  xorriso_out=""
-  if xorriso_out=$(xorriso -indev "$ISO" -outdev "$ISO.new" \
-       -boot_image any replay \
-       -append_partition 3 0x0e haos-logs.img 2>&1); then
-    mv -f "$ISO.new" "$ISO"
-    echo ">>> Partition $LOGS_LABEL ajoutee."
-  else
-    rm -f "$ISO.new"
-    echo ">>> ATTENTION: ajout de $LOGS_LABEL echoue, ISO conservee sans elle."
-    echo "$xorriso_out" | tail -10
-  fi
-  rm -f haos-logs.img
-else
-  echo ">>> ATTENTION: mkfs.vfat ou xorriso absent -> pas de partition $LOGS_LABEL."
-fi
-
+# NB: pas de partition dediee aux journaux dans l'ISO. Une 3e partition a bien
+# ete essayee (FAT16 ajoutee par 'xorriso -append_partition'), mais Windows 11
+# n'expose que la PREMIERE partition d'un support amovible : elle y restait
+# invisible sans intervention manuelle dans la gestion des disques. Et la 1re
+# partition ne peut pas servir, elle doit porter l'ISO9660 pour l'amorcage BIOS.
+# L'installateur propose desormais de reformater la cle entiere en FAT32 et d'y
+# deposer le journal, ce qui la rend en outre reutilisable -- Windows ne sait pas
+# reformater seul une cle gravee par Etcher.
 echo ">>> ISO : $ISO  ($(du -h "$ISO" | cut -f1))"
 echo ">>> Partitions :"
 fdisk -l "$ISO" 2>/dev/null | tail -6 || true

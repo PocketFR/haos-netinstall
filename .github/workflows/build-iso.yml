@@ -40,8 +40,7 @@ jobs:
 
       - name: Installer live-build
         run: |
-          # dosfstools : mkfs.vfat, pour la partition HAOS_LOGS ajoutee a l'ISO.
-          apt-get install -y live-build debootstrap fdisk sudo libarchive-tools xorriso dosfstools
+          apt-get install -y live-build debootstrap fdisk sudo libarchive-tools xorriso
           apt-get install -y p7zip-full || true   # absent de certaines versions Debian
           lb --version
           echo "--- debootstrap connait-il la cible ? ---"
@@ -83,14 +82,9 @@ jobs:
             || { echo "ERREUR: /EFI/boot/bootx64.efi introuvable dans l'ISO"; exit 1; }
           echo "OK: ISO UEFI-conforme (ESP + bootx64.efi)"
 
-          # 3) Partition des journaux ajoutee apres le build (voir build-iso.sh).
-          #    Non bloquant : l'ISO reste utilisable sans elle, l'installateur
-          #    dispose de replis. On veut juste le voir dans les logs de build.
-          if fdisk -l "$ISO" | grep -qi 'FAT16'; then
-            echo "OK: partition de journaux presente"
-          else
-            echo "ATTENTION: partition de journaux absente de l'ISO"
-          fi
+          # 3) Table de partitions, pour trace dans les logs de build. On en
+          #    attend deux : l'ISO9660 et l'ESP. Pas de partition de journaux,
+          #    voir la note dans build-iso.sh.
           fdisk -l "$ISO" | tail -6
 
           # 4) Amorcage BIOS : l'entree El Torito n'est produite que par le defaut

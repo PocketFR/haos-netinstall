@@ -121,7 +121,8 @@ Si l'adresse ne répond pas, utilisez l'adresse IP affichée à l'écran du PC :
 | La clé ne démarre pas | Secure Boot encore actif, ou mode Legacy/CSM au lieu d'UEFI |
 | Home Assistant ne démarre pas après l'installation | Secure Boot encore actif ; sur PC physique, mode SATA en RAID/Intel RST au lieu d'**AHCI** |
 | Wi-Fi OK pendant l'install mais HA hors-ligne ensuite | La carte Wi-Fi n'est pas embarquée par Home Assistant OS (couverture firmware plus restreinte que l'installateur). Utilisez l'Ethernet. |
-| Installation échouée | Un journal est écrit dans `/tmp/haos-install.log`, copié sur la partition `HAOS_LOGS` de la clé, et affichable à l'écran |
+| Installation interrompue en cours d'écriture | Coupure de la connexion Internet pendant le téléchargement. L'assistant abandonne au bout de 30 s sans débit et l'annonce ; relancer l'installation depuis le début est sans danger |
+| Installation échouée | Un journal est écrit dans `/tmp/haos-install.log`. L'assistant propose de le copier sur la clé (reformatée), sur une autre clé USB, ou de l'afficher à l'écran. Puis il éteint le PC |
 
 **Couverture Wi-Fi** : Intel, Realtek, Atheros et Broadcom. L'Ethernet reste le
 chemin fiable. Le journal d'installation indique le pilote exact de votre carte
@@ -290,28 +291,42 @@ réutilisable tel quel.
   la récupération passant par un restore en DFU depuis un autre Mac. Pour
   faire tourner HAOS sur un Mac ARM, utilisez une VM (UTM) et l'image
   `haos_generic-aarch64` — sans cet ISO, qui est amd64.
-- **Journal d'installation** — l'ISO embarque une petite partition FAT
-  étiquetée `HAOS_LOGS` qui reçoit le journal, que l'installation ait réussi ou
-  échoué. En cas de succès la copie est **silencieuse** : aucun écran de plus,
-  le journal est simplement là si vous en avez besoin. Le journal trace les
-  décisions (version retenue et sa source, disque cible, résultat de la
-  vérification, état UEFI/Secure Boot) et ne contient jamais le mot de passe
-  Wi-Fi. Cette partition existe parce que l'ESP de la clé ne laisse que ~10 Ko
-  libres, très insuffisant.
-  Elle n'apparaît que si la clé a été écrite en mode brut (`dd`, Etcher, Rufus
-  en mode DD) : sous Ventoy ou Rufus en mode ISO, l'ISO est montée en boucle et
-  la partition ne devient jamais un périphérique. Sur un échec, l'assistant
-  propose alors de brancher une autre clé, puis d'afficher le journal à l'écran
-  pour le photographier.
+- **Journal, et clé réutilisable** — le journal trace les décisions de
+  l'installation (version retenue et sa source, matériel réseau et pilote, bande
+  et chiffrement en Wi-Fi, disque cible, résultat de la vérification, état
+  UEFI/Secure Boot) et ne contient jamais le mot de passe Wi-Fi.
 
-  > **Windows 11 ne montera pas cette partition tout seul.** Il n'expose que la
-  > **première** partition d'un support amovible — Windows 10 savait en gérer
-  > plusieurs depuis la Creators Update, Windows 11 est revenu en arrière. Il
-  > faut donc lui attribuer une lettre dans *Gestion des disques*
-  > (`diskmgmt.msc`). Linux et macOS la montent directement.
-  > Ce n'est pas contournable côté ISO : la première partition doit contenir le
-  > système de fichiers ISO9660 pour l'amorçage BIOS, les journaux ne peuvent
-  > donc pas y être placés.
+  En fin de parcours — que l'installation ait réussi ou échoué — l'assistant
+  propose de **reformater la clé en une seule partition FAT32** couvrant tout
+  l'espace, et y dépose le journal. La clé redevient alors une clé USB
+  ordinaire, ce que **Windows ne sait pas faire seul** sur une clé écrite par
+  Etcher : la disposition isohybrid déroute son outil de formatage, et il faut
+  passer par `diskpart` en PowerShell administrateur. L'écran de confirmation
+  prévient que l'installateur sera effacé — il faudra regraver la clé pour
+  réinstaller. Refuser est sans conséquence.
+
+  Si vous refusez, ou si le reformatage échoue, restent la copie sur une autre
+  clé USB et l'affichage du journal à l'écran pour le photographier.
+
+  > Une partition dédiée embarquée dans l'ISO a été essayée puis abandonnée :
+  > **Windows 11 n'expose que la première partition d'un support amovible**
+  > (Windows 10 savait en gérer plusieurs depuis la Creators Update), et la
+  > première partition doit porter le système ISO9660 pour l'amorçage BIOS. Elle
+  > restait donc invisible sans attribution manuelle d'une lettre.
+
+- **Cas Ventoy** — Ventoy n'écrit pas l'ISO sur la clé : il la laisse sous forme
+  de fichier sur sa partition exFAT et l'expose au démarrage comme un
+  périphérique *device-mapper* (`/dev/dm-0`). Deux conséquences, toutes deux
+  traitées :
+  - la clé Ventoy n'est **jamais** proposée comme disque cible. Le média de boot
+    est résolu en remontant de `dm-0` au disque physique via
+    `/sys/block/dm-*/slaves/`, et tout disque portant une partition étiquetée
+    `VTOYEFI` est écarté par sécurité ;
+  - sa partition exFAT est **réservée** par ce mappage, donc non inscriptible :
+    le journal ne peut pas y être copié. L'assistant le détecte et vous demande
+    de débrancher puis rebrancher la clé — ce qui libère la partition — avant de
+    réessayer. L'installateur tournant en mémoire, la débrancher est sans
+    conséquence.
 - **Partition de données** — inutile de l'agrandir : HAOS étend automatiquement
   sa partition `hassos-data` à la taille du disque au premier démarrage.
 - **Effacement préalable** — l'assistant vide les signatures et les tables GPT

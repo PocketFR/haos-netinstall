@@ -32,7 +32,10 @@ set_strings(){
 if [ "$UI_LANG" = "fr" ]; then
   S_TITLE="Installation Home Assistant OS"
   S_WARN="⚠  AVERTISSEMENT — Installation Home Assistant OS"
-  S_RESCUE="\n\nUn terminal de secours va s'ouvrir."
+  S_RESCUE="\n\nTu vas pouvoir sauvegarder le journal, puis éteindre le PC."
+  S_HALT_ASK="Que faire maintenant ?\n\nRien ne sera modifié : l'installation est terminée, en échec.\nÉteindre est le choix normal.\n\nLe terminal n'est utile que si tu sais t'en servir."
+  S_HALT_OFF="Éteindre le PC"
+  S_HALT_SHELL="Ouvrir un terminal"
   S_CANCELLED="Installation annulée."
   S_OK_UEFI="OK (UEFI)"
   S_BAD_UEFI="À VÉRIFIER (mode Legacy/CSM détecté)"
@@ -67,7 +70,7 @@ if [ "$UI_LANG" = "fr" ]; then
   S_STOPPED="Arrêté avant toute modification."
   S_PREP="Préparation du disque %s..."
   S_WRITING="Téléchargement et écriture de HAOS %s.\nNe pas éteindre le PC."
-  S_FAIL="Échec de l'installation (code %s).\n\nDétail :\n%s\n\nJournal complet : %s"
+  S_FAIL="Échec de l'installation (code %s).\n\nCause la plus fréquente : une coupure de la connexion Internet\npendant le téléchargement. Le disque a déjà été effacé ;\nrelancer l'installation depuis le début est sans danger.\n\nDétail :\n%s\n\nJournal complet : %s"
   S_VFY_ASK="Vérifier que le disque a été écrit correctement ?\n\nRelecture de %s depuis %s.\nDurée : 1 à 3 minutes selon le disque.\n\nRecommandé, surtout sur un disque ancien."
   S_VFY_RUN="Relecture et vérification du disque..."
   S_VFY_OK="Vérification réussie.\n\nLe contenu du disque correspond exactement à l'image.\n\nSHA256 : %s..."
@@ -75,23 +78,38 @@ if [ "$UI_LANG" = "fr" ]; then
   S_VFY_SKIP="Empreinte de l'image non calculée : vérification impossible.\nL'installation est probablement correcte (le téléchargement\nest validé par le format compressé)."
   S_LOG_ASK="Copier le journal d'installation sur une clé USB ?\n\nIl sera perdu au redémarrage sinon. C'est le fichier à\njoindre pour signaler le problème."
   S_LOG_OK="Journal copié sur %s\n(fichier haos-install-*.log)\n\nTu peux retirer la clé."
-  S_LOG_PLUG="Aucun support inscriptible détecté.\n\nBranche une clé USB (FAT32, exFAT ou ext4), attends 5\nsecondes, puis valide.\n\nSeul le journal y sera ajouté : rien d'autre n'est modifié."
-  S_LOG_PLUGGED="J'ai branché la clé"
-  S_LOG_ABORT="Abandonner"
+  S_LOG_MENU="Où sauvegarder le journal d'installation ?\n\nAucun support inscriptible n'a été trouvé automatiquement.\nChoisis une solution :"
+  S_LOG_M_USB="Brancher une clé USB"
+  S_LOG_M_USB_D="branche-la, attends 5 s, puis valide"
+  S_LOG_M_FMT="Reformater la clé d'installation"
+  S_LOG_M_FMT_D="efface l'installateur, la clé redevient normale"
+  S_LOG_M_SHOW="Afficher le journal à l'écran"
+  S_LOG_M_SHOW_D="pour le photographier — marche toujours"
+  S_LOG_M_NONE="Ne pas sauvegarder"
+  S_LOG_M_NONE_D="le journal sera perdu au redémarrage"
+  S_LOG_VTOY="La clé est reconnue, mais réservée par le système de\ndémarrage, et la libérer automatiquement a échoué.\n\nC'est le cas avec Ventoy : l'image d'installation est un\nfichier de cette clé.\n\n➜ DÉBRANCHE puis REBRANCHE la clé, attends 5 secondes, et\n  choisis « Brancher une clé USB » ci-dessous.\n\nL'installateur tourne en mémoire : la débrancher est sans\nconséquence."
+  S_LOG_RO="Un support a été trouvé, mais il est en lecture seule.\n\nC'est le cas avec Ventoy : le système d'installation utilise\ncette partition, elle n'est donc pas modifiable.\n\nDébrancher puis rebrancher la clé la libère, ou choisis une\nautre solution."
   S_LOG_DETECT="Détection du support..."
   S_LOG_RETRY="Toujours rien d'inscriptible.\n\nLa clé n'est peut-être pas partitionnée, ou son format\nn'est pas reconnu. Tu peux réessayer avec une autre clé."
   S_LOG_FULL="Un support a bien été trouvé, mais il est plein.\n\nLa place manque pour y écrire le journal. Branche une\nautre clé USB, ou affiche le journal à l'écran à l'étape\nsuivante pour le photographier."
-  S_LOG_SHOW="Afficher le journal à l'écran ?\n\nTu pourras le photographier : c'est ce qu'il faut joindre\npour signaler le problème. Utilise les flèches pour faire\ndéfiler."
   S_LOG_NONE="Journal non copié.\n\nIl reste consultable dans le terminal :\n  cat %s"
   S_WIFI_PUSH="Réseau Wi-Fi « %s » pré-configuré.\n\nHome Assistant tentera de s'y connecter au premier\ndémarrage — MAIS seulement si ta carte Wi-Fi fait partie\nde celles qu'il prend en charge (sa liste est plus\nrestreinte que celle de cet installateur).\n\nSi Home Assistant n'apparaît pas en ligne après 5 min :\n • branche un câble Ethernet (recommandé), ou\n • signale ta carte au projet Home Assistant OS.\n\nGarde ce PC à portée du Wi-Fi."
   S_WIFI_PUSH_FAIL="Le Wi-Fi n'a pas pu être pré-configuré dans l'image.\n\nHome Assistant démarrera sans réseau : il faudra le\nconnecter ensuite (câble Ethernet, ou clavier+écran sur\nla console HAOS)."
   S_WIFI_PUSH_SKIP="Ce réseau Wi-Fi ne peut pas être pré-configuré.\n\nIl s'appuie sur des certificats ou un mode que Home\nAssistant ne pourra pas reprendre tel quel. Rien n'a été\nécrit : mieux vaut cela qu'un réseau qui ne monte jamais.\n\nÀ FAIRE APRÈS L'INSTALLATION :\n • branche un câble Ethernet (le plus simple), ou\n • configure le Wi-Fi depuis la console de Home Assistant\n   (clavier + écran sur le PC).\n\nLe détail figure dans le journal d'installation."
-  S_DONE_LOG="\n\nJournal copié sur la partition « HAOS_LOGS » de la clé ;\nsous Windows 11, lui donner une lettre (Gestion des disques)."
+  S_DONE_LOG="\n\nLa clé a été reformatée : elle redevient une clé USB normale,\net le journal d'installation y a été copié."
+  S_FMT_ASK="Reformater la clé USB d'installation ?\n\n%s\n\nElle redeviendrait une clé ordinaire (FAT32), utilisable\npartout, et le journal d'installation y serait copié.\n\n⚠  L'INSTALLATEUR SERA EFFACÉ : pour réinstaller, il faudra\nregraver la clé depuis un autre ordinateur.\n\nL'installation de Home Assistant déjà écrite sur le disque\nn'est pas concernée."
+  S_FMT_YES="Reformater la clé"
+  S_FMT_NO="Garder l'installateur"
+  S_FMT_FAIL="La clé n'a pas pu être reformatée.\n\nRien n'a été touché : elle reste utilisable comme\ninstallateur. Le détail figure dans le journal."
+  S_FMT_BROKEN="Le reformatage de la clé a échoué en cours de route.\n\n⚠  La clé n'est plus amorçable : il faudra la regraver pour\ns'en resservir comme installateur.\n\nL'installation de Home Assistant sur le disque n'est pas\nconcernée, elle est terminée."
   S_DONE="Installation terminée.\n\nHome Assistant OS est installé sur %s.\n\n➜ RETIRE LA CLÉ USB MAINTENANT, avant de valider.\n  (l'installateur tourne en mémoire : la clé ne sert plus)\n\nÀ SUIVRE :\n 1. Valide ci-dessous : le PC redémarre sur Home Assistant.\n 2. Garde le câble réseau branché.\n 3. Patiente 2 à 5 minutes (premier démarrage).\n 4. Depuis un autre appareil :  http://homeassistant.local"
 else
   S_TITLE="Home Assistant OS installation"
   S_WARN="⚠  WARNING — Home Assistant OS installation"
-  S_RESCUE="\n\nA rescue shell will open."
+  S_RESCUE="\n\nYou will be able to save the log, then power the PC off."
+  S_HALT_ASK="What now?\n\nNothing more will change: the installation ended in failure.\nPowering off is the normal choice.\n\nThe terminal is only useful if you know your way around it."
+  S_HALT_OFF="Power off"
+  S_HALT_SHELL="Open a terminal"
   S_CANCELLED="Installation cancelled."
   S_OK_UEFI="OK (UEFI)"
   S_BAD_UEFI="CHECK THIS (Legacy/CSM mode detected)"
@@ -126,7 +144,7 @@ else
   S_STOPPED="Stopped before any change."
   S_PREP="Preparing disk %s..."
   S_WRITING="Downloading and writing HAOS %s.\nDo not power off the PC."
-  S_FAIL="Installation failed (code %s).\n\nDetails:\n%s\n\nFull log: %s"
+  S_FAIL="Installation failed (code %s).\n\nMost common cause: the Internet connection dropped during the\ndownload. The disk has already been erased; starting the\ninstallation over from scratch is safe.\n\nDetails:\n%s\n\nFull log: %s"
   S_VFY_ASK="Verify that the disk was written correctly?\n\nReads back %s from %s.\nTakes 1 to 3 minutes depending on the disk.\n\nRecommended, especially on an older disk."
   S_VFY_RUN="Reading back and verifying the disk..."
   S_VFY_OK="Verification passed.\n\nThe disk contents match the image exactly.\n\nSHA256: %s..."
@@ -134,18 +152,30 @@ else
   S_VFY_SKIP="Image checksum was not computed: cannot verify.\nThe installation is most likely fine (the download is\nvalidated by the compressed format itself)."
   S_LOG_ASK="Copy the installation log to a USB stick?\n\nIt will be lost on reboot otherwise. This is the file to\nattach when reporting the problem."
   S_LOG_OK="Log copied to %s\n(file haos-install-*.log)\n\nYou can remove the stick."
-  S_LOG_PLUG="No writable media detected.\n\nPlug in a USB stick (FAT32, exFAT or ext4), wait 5 seconds,\nthen confirm.\n\nOnly the log will be added: nothing else is modified."
-  S_LOG_PLUGGED="I plugged it in"
-  S_LOG_ABORT="Give up"
+  S_LOG_MENU="Where should the installation log be saved?\n\nNo writable medium was found automatically.\nPick an option:"
+  S_LOG_M_USB="Plug in a USB stick"
+  S_LOG_M_USB_D="plug it in, wait 5 s, then confirm"
+  S_LOG_M_FMT="Reformat the installer stick"
+  S_LOG_M_FMT_D="erases the installer, the stick becomes normal"
+  S_LOG_M_SHOW="Show the log on screen"
+  S_LOG_M_SHOW_D="to photograph it — always works"
+  S_LOG_M_NONE="Do not save"
+  S_LOG_M_NONE_D="the log will be lost on reboot"
+  S_LOG_VTOY="The stick is recognised, but reserved by the boot system,\nand releasing it automatically failed.\n\nThis happens with Ventoy: the installation image is a file on\nthis stick.\n\n➜ UNPLUG then REPLUG the stick, wait 5 seconds, and pick\n  \"Plug in a USB stick\" below.\n\nThe installer runs from memory: unplugging it is harmless."
+  S_LOG_RO="A medium was found, but it is read-only.\n\nThis happens with Ventoy: the install system is using that\npartition, so it cannot be modified.\n\nUnplugging and replugging the stick frees it, or pick another\noption."
   S_LOG_DETECT="Detecting media..."
   S_LOG_RETRY="Still nothing writable.\n\nThe stick may be unpartitioned, or its format is not\nrecognised. You can try another one."
   S_LOG_FULL="A medium was found, but it is full.\n\nThere is not enough room to write the log. Plug in another\nUSB stick, or display the log on screen at the next step to\nphotograph it."
-  S_LOG_SHOW="Display the log on screen?\n\nYou can photograph it: this is what to attach when\nreporting the problem. Use the arrow keys to scroll."
   S_LOG_NONE="Log not copied.\n\nIt is still readable from the shell:\n  cat %s"
   S_WIFI_PUSH="Wi-Fi network \"%s\" pre-configured.\n\nHome Assistant will try to connect on first boot — BUT\nonly if your Wi-Fi card is among those it supports (its\nlist is narrower than this installer's).\n\nIf Home Assistant is not online after 5 min:\n • plug in an Ethernet cable (recommended), or\n • report your card to the Home Assistant OS project.\n\nKeep this PC within Wi-Fi range."
   S_WIFI_PUSH_FAIL="Wi-Fi could not be pre-configured into the image.\n\nHome Assistant will boot with no network: you will have to\nconnect it afterwards (Ethernet cable, or keyboard+screen\non the HAOS console)."
   S_WIFI_PUSH_SKIP="This Wi-Fi network cannot be pre-configured.\n\nIt relies on certificates or a mode Home Assistant could not\npick up as-is. Nothing was written: better that than a\nnetwork that never comes up.\n\nTO DO AFTER THE INSTALL:\n • plug in an Ethernet cable (simplest), or\n • configure Wi-Fi from the Home Assistant console\n   (keyboard + screen on the PC).\n\nDetails are in the installation log."
-  S_DONE_LOG="\n\nLog copied to the \"HAOS_LOGS\" partition of the stick;\non Windows 11, assign it a letter in Disk Management."
+  S_DONE_LOG="\n\nThe stick was reformatted: it is a normal USB stick again,\nand the installation log was copied onto it."
+  S_FMT_ASK="Reformat the installer USB stick?\n\n%s\n\nIt would become an ordinary FAT32 stick, usable anywhere,\nand the installation log would be copied onto it.\n\n⚠  THE INSTALLER WILL BE ERASED: to reinstall, you would\nhave to write the stick again from another computer.\n\nThe Home Assistant installation already written to the disk\nis not affected."
+  S_FMT_YES="Reformat the stick"
+  S_FMT_NO="Keep the installer"
+  S_FMT_FAIL="The stick could not be reformatted.\n\nNothing was touched: it is still usable as an installer.\nDetails are in the log."
+  S_FMT_BROKEN="Reformatting the stick failed partway through.\n\n⚠  The stick is no longer bootable: you will have to write it\nagain to reuse it as an installer.\n\nThe Home Assistant installation on the disk is not affected,\nit is complete."
   S_DONE="Installation complete.\n\nHome Assistant OS is installed on %s.\n\n➜ REMOVE THE USB STICK NOW, before confirming.\n  (the installer runs from memory: the stick is no longer used)\n\nNEXT:\n 1. Confirm below: the PC reboots into Home Assistant.\n 2. Keep the network cable plugged in.\n 3. Wait 2 to 5 minutes (first boot).\n 4. From another device:  http://homeassistant.local"
 fi
 }
@@ -197,7 +227,20 @@ wt_yesno(){                                 # <titre> <texte> [args whiptail...]
   whiptail --title "$title" $WT_SCROLL "$@" --yesno "$text" "$WT_H" "$WT_W"
 }
 
-die(){ wt_msg "$S_TITLE" "$1$S_RESCUE"; save_log; loud_console; clear; exec bash; }
+# Fin de parcours sur erreur. On ETEINT par defaut plutot que de rendre un shell :
+# une invite bash ne veut rien dire pour le public visé. Le terminal reste
+# accessible via le second bouton -- et non via Ctrl+Alt+F2, dont la
+# disponibilite depend d'un getty et d'un mot de passe qu'on ne maitrise pas
+# (le service occupe tty1 et le live bascule en multi-user.target).
+die(){
+  wt_msg "$S_TITLE" "$1$S_RESCUE"
+  save_log
+  loud_console
+  if wt_yesno "$S_TITLE" "$S_HALT_ASK" --yes-button "$S_HALT_OFF" --no-button "$S_HALT_SHELL"; then
+    clear; poweroff
+  fi
+  clear; exec bash
+}
 
 # ---------------------------------------------------------------------------
 # ECRAN 1 : langue + clavier en une question.
@@ -414,40 +457,133 @@ secureboot_status(){
 # 2 = montee mais trop petite (ou copie refusee).
 # NB: on interroge lsblk UNE COLONNE A LA FOIS. En multi-colonnes, une valeur
 #     vide (TRAN, FSTYPE...) fait glisser les champs suivants a la lecture.
+# La partition est-elle retenue par un device-mapper ? C'est le cas sous Ventoy :
+# l'ISO est un FICHIER de la partition exFAT, que Ventoy expose en dm-linear. La
+# partition est donc reclamee par dm et refuse un montage en ecriture -- d'ou le
+# contournement "debrancher/rebrancher", qui detruit ce mappage.
+dm_holds(){
+  local p="$1" s
+  for s in /sys/block/dm-*/slaves/*; do
+    [ -e "$s" ] || continue
+    [ "$(basename "$s")" = "$p" ] && return 0
+  done
+  return 1
+}
+
+# Libere la partition retenue par le mappage de demarrage (Ventoy), pour pouvoir
+# y ecrire le journal sans demander a l'utilisateur de debrancher la cle.
+#
+# CONDITION DE SURETE ABSOLUE : ne rien retirer si le live lit encore le media.
+# 'toram' est SILENCIEUSEMENT IGNORE par live-boot quand la RAM est insuffisante ;
+# dans ce cas le systeme de fichiers racine vient toujours du mappage, et le
+# supprimer tuerait l'installateur en pleine execution. La preuve que toram a
+# pris effet : /run/live/medium est un tmpfs. Au moindre doute on renonce et on
+# retombe sur l'instruction manuelle.
+release_boot_medium(){
+  local p="$1" fs dm base name holders mp disk
+  fs=$(findmnt -no FSTYPE /run/live/medium 2>/dev/null || true)
+  if [ -n "$fs" ] && [ "$fs" != "tmpfs" ]; then
+    logx "liberation refusee : le live lit encore le media ($fs), toram inactif"
+    return 1
+  fi
+  command -v dmsetup >/dev/null 2>&1 || { logx "liberation impossible : dmsetup absent"; return 1; }
+
+  for dm in /sys/block/dm-*; do
+    [ -e "$dm/slaves/$p" ] || continue
+    base=$(basename "$dm")
+    name=$(cat "$dm/dm/name" 2>/dev/null)
+    # Un mappage empile par-dessus interdit le retrait.
+    holders=$(find "$dm/holders" -mindepth 1 2>/dev/null | wc -l)
+    if [ "${holders:-0}" -gt 0 ]; then
+      logx "liberation refusee : ${name:-$base} a des dependants"
+      return 1
+    fi
+    # Demonter le mappage s'il l'est encore : avec toram l'ISO ne sert plus.
+    # "|| [ -n "$mp" ]" : sans cela une sortie sans retour chariot final ferait
+    # SAUTER la derniere ligne, donc un point de montage non demonte.
+    while read -r mp || [ -n "$mp" ]; do
+      [ -n "$mp" ] || continue
+      umount "$mp" 2>>"$LOG" || { logx "liberation : $mp non demontable"; return 1; }
+    done < <(findmnt -rn -S "/dev/$base" -o TARGET 2>/dev/null)
+    dmsetup remove "${name:-$base}" 2>>"$LOG" \
+      || { logx "liberation : dmsetup remove a echoue sur ${name:-$base}"; return 1; }
+    logx "mappage de demarrage ${name:-$base} retire, /dev/$p libere"
+  done
+
+  # Ventoy protege parfois le peripherique en lecture seule.
+  disk=$(lsblk -no PKNAME "/dev/$p" 2>/dev/null | head -1 | tr -d ' ')
+  [ -n "$disk" ] && { blockdev --setrw "/dev/$disk" 2>>"$LOG" || true; }
+  partprobe "/dev/${disk:-$p}" 2>>"$LOG" || true
+  udevadm settle 2>/dev/null || sleep 2
+  return 0
+}
+
 write_log_to(){
-  local p="$1" src="$2" need="$3" avail
-  mkdir -p /mnt/logdest 2>/dev/null
-  mount -o rw "/dev/$p" /mnt/logdest 2>>"$LOG" || return 1
-  avail=$(df --output=avail -k /mnt/logdest 2>/dev/null | tail -1 | tr -d ' ')
+  local p="$1" src="$2" need="$3" mp avail owned=0 rc
+
+  # Retenue par un mappage de demarrage ? Tenter de le liberer plutot que
+  # d'imposer un debranchement. Si cela echoue, la suite renverra 4 et
+  # l'utilisateur recevra l'instruction manuelle.
+  if dm_holds "$p"; then
+    release_boot_medium "$p" || true
+  fi
+  # PIEGE (constate sous Ventoy) : si la partition est DEJA montee en lecture
+  # seule -- Ventoy tient sa partition de donnees pour y lire l'ISO -- alors
+  # "mount -o rw" reutilise le superbloc en lecture seule et reussit malgre tout.
+  # Le cp echouait ensuite, et etait rapporte comme un manque de place. On detecte
+  # donc le montage existant, on tente de le repasser en ecriture, et on ne
+  # DEMONTE JAMAIS ce qu'on n'a pas monte : le live peut en dependre.
+  # On TENTE d'abord, sans rien presumer : dm_holds ne sert qu'a EXPLIQUER un
+  # echec (code 4), jamais a refuser d'essayer -- une configuration ou cela
+  # fonctionnerait quand meme ne doit pas etre ecartee.
+  mp=$(findmnt -rn -S "/dev/$p" -o TARGET 2>/dev/null | head -1)
+  if [ -n "$mp" ]; then
+    if ! touch "$mp/.haos-wtest" 2>/dev/null; then
+      if ! mount -o remount,rw "$mp" 2>>"$LOG" || ! touch "$mp/.haos-wtest" 2>/dev/null; then
+        dm_holds "$p" && { logx "journal : /dev/$p retenu par device-mapper (Ventoy)"; return 4; }
+        return 3
+      fi
+    fi
+    rm -f "$mp/.haos-wtest" 2>/dev/null || true
+  else
+    mp=/mnt/logdest
+    mkdir -p "$mp" 2>/dev/null
+    if ! mount -o rw "/dev/$p" "$mp" 2>>"$LOG"; then
+      dm_holds "$p" && { logx "journal : /dev/$p retenu par device-mapper (Ventoy)"; return 4; }
+      return 1
+    fi
+    owned=1
+  fi
+
+  rc=0
+  avail=$(df --output=avail -k "$mp" 2>/dev/null | tail -1 | tr -d ' ')
   if [ "${avail:-0}" -lt "$need" ]; then
-    umount /mnt/logdest 2>/dev/null || true; return 2
+    rc=2
+  elif cp "$src" "$mp/haos-install-$(date +%Y%m%d-%H%M).log" 2>>"$LOG"; then
+    sync
+  else
+    rc=3                      # monte mais non inscriptible : ce n'est PAS "plein"
   fi
-  if cp "$src" "/mnt/logdest/haos-install-$(date +%Y%m%d-%H%M).log" 2>>"$LOG"; then
-    sync; umount /mnt/logdest 2>/dev/null || true; return 0
-  fi
-  umount /mnt/logdest 2>/dev/null || true; return 2
+  [ "$owned" -eq 1 ] && { umount "$mp" 2>/dev/null || true; }
+  return $rc
 }
 
 # Tente d'ecrire le journal. Affiche le peripherique utilise, ou renvoie :
-#   1 = aucun support inscriptible   2 = support trouve mais sans place
+#   1 = aucun support inscriptible trouve
+#   2 = support trouve mais sans place
+#   3 = support trouve mais non inscriptible (monte en lecture seule)
+#   4 = support retenu par le systeme de demarrage (Ventoy) : debrancher/rebrancher
 try_write_log(){
   local src="$1" part st need rc=1
   need=$(( ($(stat -c%s "$src" 2>/dev/null || echo 0) / 1024) + 64 ))   # Ko + marge
 
-  # 1) Cible privilegiee : la partition que build-iso.sh a ajoutee a l'ISO.
-  #    Deterministe -- c'est la notre, on la reconnait a son LABEL.
-  part=$(blkid -L "$LOGS_LABEL" 2>/dev/null)
-  if [ -n "$part" ]; then
-    write_log_to "$(basename "$part")" "$src" "$need"; st=$?
-    [ $st -eq 0 ] && { echo "$part"; return 0; }
-    [ $st -eq 2 ] && rc=2
-  fi
-
-  # 2) Repli (Ventoy, gravure alternative, CD) : partitions des disques amovibles.
-  #    TRAN est porte par le DISQUE, pas par la partition -> on etablit d'abord la
-  #    liste des disques amovibles, puis on filtre les partitions par leur PKNAME.
-  #    HOTPLUG seul ne suffirait pas : les NVMe et les baies SATA hot-swap le
-  #    rapportent aussi, on ecrirait alors sur un disque interne.
+  # Partitions des disques amovibles. TRAN est porte par le DISQUE, pas par la
+  # partition -> on etablit d'abord la liste des disques amovibles, puis on filtre
+  # les partitions par leur PKNAME. HOTPLUG seul ne suffirait pas : les NVMe et
+  # les baies SATA hot-swap le rapportent aussi, on ecrirait alors sur un disque
+  # interne. La cle d'installation elle-meme n'offre pas de cible : son ESP ne
+  # laisse que ~10 Ko libres et l'ISO9660 est en lecture seule -- d'ou l'offre de
+  # reformatage (reformat_stick) comme voie principale.
   local usb_disks="" d
   while read -r d; do
     [ -n "$d" ] || continue
@@ -470,7 +606,11 @@ try_write_log(){
     [ -n "$target_disk" ] && [ "$pk" = "$target_disk" ] && continue
     write_log_to "$part" "$src" "$need"; st=$?
     [ $st -eq 0 ] && { echo "/dev/$part"; return 0; }
-    [ $st -eq 2 ] && rc=2
+    # On retient le diagnostic le plus informatif : "plein" ou "lecture seule"
+    # valent mieux que "aucun support", qui laisserait croire a un defaut de
+    # detection alors qu'un support a bien ete trouve.
+    # 4 (retenu par Ventoy) est le diagnostic le plus actionnable : il prime.
+    case $st in 4) rc=4 ;; 2|3) [ "$rc" -eq 4 ] || rc=$st ;; esac
   done < <(lsblk -lno NAME,TYPE 2>/dev/null)
 
   return $rc
@@ -488,55 +628,138 @@ describe_part(){
   fi
 }
 
-# Archivage SILENCIEUX du journal, pour le chemin de succes. Sans question :
-# la partition HAOS_LOGS est la notre et a la place, il n'y a donc aucune raison
-# d'ajouter un ecran a un parcours qui s'est bien passe. Jusqu'ici seul die()
-# sauvait le journal -> il etait perdu sur une installation reussie.
-# 0 = archive, 1 = pas de partition dediee (Ventoy, CD) ou echec d'ecriture.
-archive_log_quietly(){
-  local part need
-  [ -s "$LOG" ] || return 1
-  part=$(blkid -L "$LOGS_LABEL" 2>/dev/null) || return 1
-  [ -n "$part" ] || return 1
-  need=$(( ($(stat -c%s "$LOG" 2>/dev/null || echo 0) / 1024) + 64 ))
-  write_log_to "$(basename "$part")" "$LOG" "$need" >/dev/null 2>&1
+# Reformate la CLE D'INSTALLATION en une seule partition FAT32 couvrant tout
+# l'espace, puis y depose le journal.
+#
+# Deux problemes resolus d'un coup :
+#   - le journal atterrit sur une partition UNIQUE, donc visible partout ;
+#     Windows 11 n'expose que la 1re partition d'un support amovible, ce qui
+#     rendait invisible une partition dediee ajoutee a l'ISO ;
+#   - la cle redevient reutilisable. Windows ne sait pas reformater seul une cle
+#     gravee par Etcher (il faut diskpart en PowerShell administrateur), la
+#     disposition isohybrid deroutant son outil de formatage.
+#
+# 'toram' ayant recopie le live en RAM, le media n'est plus monte et peut donc
+# etre repartitionne. On le VERIFIE malgre tout avant d'ecrire : au moindre doute
+# on renonce SANS RIEN EFFACER, sur une cle qui est peut-etre le seul moyen de
+# reessayer.
+# Codes : 0 = reformatee | 1 = refus de l'utilisateur
+#         2 = renonce AVANT toute ecriture, la cle est intacte
+#         3 = echec APRES le debut de l'effacement : la cle n'est plus amorcable
+# La distinction 2/3 n'est pas cosmetique : elle decide si l'on peut dire a
+# l'utilisateur que sa cle sert encore d'installateur.
+reformat_stick(){
+  local dev="$1" p mnt=/mnt/newstick
+  [ -n "$dev" ] || { logx "reformatage impossible : media de boot non identifie"; return 2; }
+  [ -b "/dev/$dev" ] || { logx "reformatage impossible : /dev/$dev absent"; return 2; }
+  # JAMAIS un peripherique virtuel : sous Ventoy l'ISO est exposee via
+  # device-mapper (/dev/dm-0), et l'effacer reviendrait a ecrire dans les secteurs
+  # du fichier ISO sur la cle. to_physical_disk doit avoir remonte au vrai disque ;
+  # si ce n'est pas le cas, on renonce.
+  case "$dev" in
+    dm-*|loop*|md*) logx "reformatage refuse : $dev est un peripherique virtuel"; return 2 ;;
+  esac
+  # Doit etre un DISQUE entier, pas une partition.
+  [ "$(lsblk -dno TYPE "/dev/$dev" 2>/dev/null | tr -d ' ')" = "disk" ] \
+    || { logx "reformatage refuse : $dev n'est pas un disque entier"; return 2; }
+  # Jamais le disque qu'on vient d'installer.
+  [ -n "${TARGET:-}" ] && [ "$dev" = "$(basename "$TARGET")" ] && {
+    logx "reformatage refuse : $dev est le disque d'installation"; return 2; }
+
+  # Aucune partition du peripherique ne doit etre montee.
+  for p in $(lsblk -lno NAME "/dev/$dev" 2>/dev/null); do
+    if findmnt -rn -S "/dev/$p" >/dev/null 2>&1; then
+      logx "reformatage impossible : /dev/$p est monte"
+      return 2
+    fi
+  done
+
+  # --defaultno : l'action EFFACE la cle, le bouton par defaut doit donc etre
+  # « garder l'installateur ». Valider sans lire ne doit rien detruire.
+  wt_yesno "$S_WARN" "$(printf "$S_FMT_ASK" "$(describe_part "/dev/$dev")")" \
+    --defaultno --yes-button "$S_FMT_YES" --no-button "$S_FMT_NO" \
+    || { logx "reformatage refuse par l'utilisateur"; return 1; }
+
+  # ---- A PARTIR D'ICI LA CLE EST MODIFIEE : tout echec renvoie 3, pas 2. ----
+  # 0x0c = FAT32 LBA, demarrage a 1 MiB (alignement).
+  wipefs -af "/dev/$dev" 2>>"$LOG" || true
+  printf 'label: dos\nstart=2048, type=0c, bootable\n' \
+    | sfdisk --quiet --force "/dev/$dev" 2>>"$LOG" || {
+        logx "reformatage : sfdisk en echec, cle plus amorcable"; return 3; }
+  partprobe "/dev/$dev" 2>>"$LOG" || true; udevadm settle 2>/dev/null || sleep 2
+
+  p=$(lsblk -lno NAME,TYPE "/dev/$dev" 2>/dev/null | awk '$2=="part"{print $1; exit}')
+  [ -n "$p" ] || { logx "reformatage : aucune partition apres sfdisk"; return 3; }
+  # mkfs.vfat -F 32 formate au-dela de 32 Go, la ou l'outil de Windows refuse.
+  mkfs.vfat -F 32 -n "$LOGS_LABEL" "/dev/$p" >/dev/null 2>>"$LOG" || {
+      logx "reformatage : mkfs.vfat en echec sur /dev/$p"; return 3; }
+
+  mkdir -p "$mnt"
+  mount "/dev/$p" "$mnt" 2>>"$LOG" || { logx "reformatage : montage de /dev/$p impossible"; return 3; }
+  cp "$LOG" "$mnt/haos-install-$(date +%Y%m%d-%H%M).log" 2>>"$LOG" || true
+  sync; umount "$mnt" 2>>"$LOG" || true
+  logx "cle $dev reformatee en FAT32 ($LOGS_LABEL), journal copie"
+  return 0
 }
 
+# Sauvegarde du journal. Un MENU explicite, et non un enchainement de questions :
+# dans la version precedente, atteindre le reformatage imposait de repondre
+# "Abandonner" a la question sur la seconde cle -- un bouton qui semblait tout
+# arreter alors qu'il donnait acces aux autres solutions. Chaque destination est
+# desormais nommee et choisie directement.
 save_log(){
-  local dest st
+  local dest st choice items=()
   [ -s "$LOG" ] || return 0
   wt_yesno "$S_TITLE" "$S_LOG_ASK" || return 0
 
+  # Premiere tentative automatique : si une cle inscriptible est deja la, inutile
+  # d'imposer un menu.
   dest=$(try_write_log "$LOG"); st=$?
   if [ $st -eq 0 ]; then
     wt_msg "$S_TITLE" "$(printf "$S_LOG_OK" "$(describe_part "$dest")")"; return 0
   fi
-  # 2 = un support a bien ete trouve, mais sans place : le dire clairement,
-  # sinon "aucun support inscriptible" laisse croire a un defaut de detection.
-  [ $st -eq 2 ] && wt_msg "$S_WARN" "$S_LOG_FULL"
+  case $st in
+    2) wt_msg "$S_WARN" "$S_LOG_FULL" ;;
+    3) wt_msg "$S_WARN" "$S_LOG_RO" ;;
+    4) wt_msg "$S_WARN" "$S_LOG_VTOY" ;;   # retenu par dm : instruction precise
+  esac
 
   while true; do
-    wt_yesno "$S_TITLE" "$S_LOG_PLUG" \
-      --yes-button "$S_LOG_PLUGGED" --no-button "$S_LOG_ABORT" || break
-    whiptail --title "$S_TITLE" --infobox "$S_LOG_DETECT" 7 62
-    udevadm settle 2>/dev/null || sleep 3
-    partprobe 2>/dev/null || true; sleep 1
-    dest=$(try_write_log "$LOG"); st=$?
-    if [ $st -eq 0 ]; then
-      wt_msg "$S_TITLE" "$(printf "$S_LOG_OK" "$(describe_part "$dest")")"; return 0
-    fi
-    # if/else et non "&& ... || ..." : whiptail renvoie 1 sur Echap, ce qui
-    # declencherait la seconde branche en plus de la premiere.
-    if [ $st -eq 2 ]; then wt_msg "$S_WARN" "$S_LOG_FULL"
-    else                   wt_msg "$S_TITLE" "$S_LOG_RETRY"
-    fi
-  done
+    items=("$S_LOG_M_USB" "$S_LOG_M_USB_D")
+    # Le reformatage n'est propose que si l'on a identifie la cle de boot.
+    [ -n "${live_dev:-}" ] && items+=("$S_LOG_M_FMT" "$S_LOG_M_FMT_D")
+    items+=("$S_LOG_M_SHOW" "$S_LOG_M_SHOW_D" "$S_LOG_M_NONE" "$S_LOG_M_NONE_D")
 
-  # Dernier recours, toujours disponible : afficher le journal a l'ecran pour
-  # que l'utilisateur le photographie. wt_msg bascule seul en --scrolltext.
-  if wt_yesno "$S_TITLE" "$S_LOG_SHOW"; then
-    wt_msg "$S_TITLE" "$(cat "$LOG")"
-  fi
+    choice=$(whiptail --title "$S_TITLE" --menu "$S_LOG_MENU" 20 74 4 \
+             "${items[@]}" 3>&1 1>&2 2>&3) || choice="$S_LOG_M_NONE"
+
+    case "$choice" in
+      "$S_LOG_M_USB")
+        whiptail --title "$S_TITLE" --infobox "$S_LOG_DETECT" 7 62
+        udevadm settle 2>/dev/null || sleep 3
+        partprobe 2>/dev/null || true; sleep 1
+        dest=$(try_write_log "$LOG"); st=$?
+        case $st in
+          0) wt_msg "$S_TITLE" "$(printf "$S_LOG_OK" "$(describe_part "$dest")")"; return 0 ;;
+          2) wt_msg "$S_WARN" "$S_LOG_FULL" ;;
+          3) wt_msg "$S_WARN" "$S_LOG_RO" ;;
+          4) wt_msg "$S_WARN" "$S_LOG_VTOY" ;;
+          *) wt_msg "$S_TITLE" "$S_LOG_RETRY" ;;
+        esac ;;
+      "$S_LOG_M_FMT")
+        reformat_stick "${live_dev:-}"
+        case $? in
+          0) wt_msg "$S_TITLE" "$(printf "$S_LOG_OK" "$(describe_part "/dev/$live_dev")")"; return 0 ;;
+          2) wt_msg "$S_WARN" "$S_FMT_FAIL" ;;
+          3) wt_msg "$S_WARN" "$S_FMT_BROKEN" ;;
+        esac ;;                                  # 1 = refus, on revient au menu
+      "$S_LOG_M_SHOW")
+        # Toujours disponible, sans aucun support : wt_msg bascule seul en
+        # --scrolltext pour que le journal defile.
+        wt_msg "$S_TITLE" "$(cat "$LOG")" ;;
+      *) break ;;
+    esac
+  done
   wt_msg "$S_TITLE" "$(printf "$S_LOG_NONE" "$LOG")"
 }
 
@@ -670,8 +893,12 @@ pick_disk(){
     [ -n "$live_dev" ] && [ "$name" = "$live_dev" ] && continue   # jamais le media de boot
     # Ceinture et bretelles : tout disque portant un iso9660 (lui-meme ou une de
     # ses partitions) est un media d'installation, jamais une cible. Couvre les
-    # gravures ou le LABEL ne serait pas celui attendu (Ventoy, dd d'un autre ISO).
+    # gravures ou le LABEL ne serait pas celui attendu (dd d'un autre ISO).
     lsblk -no FSTYPE "/dev/$name" 2>/dev/null | grep -qx iso9660 && continue
+    # Cle Ventoy : elle ne porte PAS d'iso9660 (l'ISO est un fichier sur sa
+    # partition exFAT, expose via device-mapper), donc le test precedent la
+    # laissait passer. Sa 2e partition porte l'etiquette VTOYEFI : signal fiable.
+    lsblk -no LABEL "/dev/$name" 2>/dev/null | grep -qix 'VTOYEFI' && continue
 
     size=$(lsblk -dno SIZE    "/dev/$name" 2>/dev/null | xargs)
     model=$(lsblk -dno MODEL  "/dev/$name" 2>/dev/null | xargs)
@@ -729,7 +956,14 @@ flash(){
   set -o pipefail
   local rc
   {
-    curl -fSL "$IMG_URL" 2>>"$LOG" \
+    # --speed-limit/--speed-time : sans eux, une coupure reseau laissait curl
+    # attendre selon les temporisations TCP, 'pv -n' reemettre le dernier
+    # pourcentage, et la jauge se figer indefiniment -- l'utilisateur ne pouvait
+    # pas distinguer "lent" de "mort". Sous 1 Ko/s pendant 30 s, curl abandonne.
+    # Pas de --retry ici : sans -C - la reprise recommence a zero et reinjecte les
+    # octets dans le flux xz, ce qui le corrompt ; et -C - est inutilisable sur un
+    # tube, curl ne pouvant s'y repositionner.
+    curl -fSL --speed-limit 1024 --speed-time 30 "$IMG_URL" 2>>"$LOG" \
       | pv -n -s "$dl" 2> >(whiptail --title "$S_TITLE" --gauge \
             "$(printf "$S_WRITING" "$HAOS_VERSION")" 9 72 0 >/dev/tty) \
       | xz -dc 2>>"$LOG" \
@@ -964,12 +1198,18 @@ finalize(){
     logx "entree UEFI 'HAOS' recreee sur $TARGET"
   fi
 
-  # Archiver le journal AVANT de demander le retrait de la cle : c'est le dernier
-  # moment ou elle est encore branchee. On n'annonce l'archivage que s'il a
-  # reellement eu lieu, sinon le message mentirait (Ventoy, CD, gravure ISO).
+  # Proposer le reformatage AVANT de demander le retrait de la cle : c'est le
+  # dernier moment ou elle est encore branchee. On n'annonce le resultat que s'il
+  # a reellement eu lieu, sinon le message mentirait.
   logx "installation terminee avec succes sur $TARGET"
-  local logmsg=""
-  archive_log_quietly && logmsg="$S_DONE_LOG"
+  local logmsg="" fmt_rc
+  reformat_stick "${live_dev:-}"; fmt_rc=$?
+  case $fmt_rc in
+    0) logmsg="$S_DONE_LOG" ;;
+    2) wt_msg "$S_WARN" "$S_FMT_FAIL" ;;     # cle intacte
+    3) wt_msg "$S_WARN" "$S_FMT_BROKEN" ;;   # cle plus amorcable : le dire
+                                             # 1 = refus assume, rien a dire
+  esac
 
   # 'toram' a recopie le live en RAM : la cle n'est plus utilisee, on peut donc
   # demander son retrait MAINTENANT. Le reboot part alors directement sur HAOS,
@@ -980,9 +1220,10 @@ finalize(){
 
 # ---------------------------------------------------------------------------
 HAOS_BOARD="generic-x86-64"   # cle du canal stable ET nom de l'image : gardes en phase
-# Les deux LABEL suivants sont poses par build-iso.sh : garder les deux fichiers
-# en phase. ISO_LABEL identifie le media de boot, LOGS_LABEL la partition ou
-# deposer le journal d'installation.
+# ISO_LABEL est pose par build-iso.sh (--iso-volume) : garder les deux fichiers en
+# phase. Il sert a reconnaitre le media de boot, 'toram' ayant remplace
+# /run/live/medium par un tmpfs. LOGS_LABEL est l'etiquette donnee a la cle si
+# l'utilisateur accepte son reformatage en fin d'installation.
 ISO_LABEL="HAOS Installer"
 LOGS_LABEL="HAOS_LOGS"
 HAOS_VERSION=""
@@ -996,20 +1237,44 @@ WIFI_PSK=""
 # tmpfs -- findmnt y renvoie donc "tmpfs" et non un peripherique. On identifie
 # donc le media par le LABEL que build-iso.sh a pose (--iso-volume), en remontant
 # au disque parent si la correspondance tombe sur une partition.
+# Remonte d'un nom de peripherique au DISQUE PHYSIQUE qui le porte.
+# Indispensable sous Ventoy : celui-ci n'expose pas la partition de la cle mais un
+# peripherique device-mapper (/dev/dm-0) dont le contenu est l'ISO. C'est donc
+# dm-0 que blkid trouve, un nom qui ne correspond a aucun disque -- l'exclusion
+# de pick_disk ne s'appliquait pas et la CLE VENTOY ETAIT PROPOSEE COMME CIBLE
+# D'INSTALLATION. /sys/block/dm-N/slaves/ donne le peripherique sous-jacent.
+to_physical_disk(){
+  local n s pk
+  n=$(basename "${1:-}")
+  [ -n "$n" ] || return 1
+  case "$n" in
+    dm-*|md*)
+      for s in "/sys/block/$n/slaves/"*; do
+        [ -e "$s" ] || continue
+        # Recursif : un empilement dm sur dm reste possible.
+        to_physical_disk "$(basename "$s")" && return 0
+      done
+      return 1 ;;
+    loop*)
+      # Le fichier de sauvegarde ne dit pas sur quel disque il se trouve : on
+      # renonce plutot que de deviner.
+      return 1 ;;
+  esac
+  pk=$(lsblk -no PKNAME "/dev/$n" 2>/dev/null | head -1 | tr -d ' ')
+  printf '%s' "${pk:-$n}"
+}
+
 resolve_live_dev(){
-  local hit pk src
+  local hit d src
   hit=$(blkid -L "$ISO_LABEL" 2>/dev/null)
   if [ -n "$hit" ]; then
-    pk=$(lsblk -no PKNAME "$hit" 2>/dev/null | head -1 | tr -d ' ')
-    [ -n "$pk" ] && { echo "$pk"; return 0; }
-    basename "$hit"; return 0
+    d=$(to_physical_disk "$hit") && [ -n "$d" ] && { printf '%s' "$d"; return 0; }
   fi
   # Repli historique : valable si un jour 'toram' disparait du bootappend.
   src=$(findmnt -no SOURCE /run/live/medium 2>/dev/null || true)
   case "$src" in
-    /dev/*) pk=$(lsblk -no PKNAME "$src" 2>/dev/null | head -1 | tr -d ' ')
-            echo "${pk:-$(basename "$src")}" ;;
-    *)      echo "" ;;
+    /dev/*) to_physical_disk "$src" || printf '' ;;
+    *)      printf '' ;;
   esac
 }
 live_dev=$(resolve_live_dev)
