@@ -80,13 +80,13 @@ if [ "$UI_LANG" = "fr" ]; then
   S_LOG_OK="Journal copié sur %s\n(fichier haos-install-*.log)\n\nTu peux retirer la clé."
   S_LOG_MENU="Où sauvegarder le journal d'installation ?\n\nAucun support inscriptible n'a été trouvé automatiquement.\nChoisis une solution :"
   S_LOG_M_USB="Brancher une clé USB"
-  S_LOG_M_USB_D="branche-la, attends 5 s, puis valide"
-  S_LOG_M_FMT="Reformater la clé d'installation"
-  S_LOG_M_FMT_D="efface l'installateur, la clé redevient normale"
-  S_LOG_M_SHOW="Afficher le journal à l'écran"
-  S_LOG_M_SHOW_D="pour le photographier — marche toujours"
+  S_LOG_M_USB_D="attends 5 s, puis valide"
+  S_LOG_M_FMT="Reformater cette clé"
+  S_LOG_M_FMT_D="efface l'installateur"
+  S_LOG_M_SHOW="Afficher à l'écran"
+  S_LOG_M_SHOW_D="pour le photographier"
   S_LOG_M_NONE="Ne pas sauvegarder"
-  S_LOG_M_NONE_D="le journal sera perdu au redémarrage"
+  S_LOG_M_NONE_D="le journal sera perdu"
   S_LOG_VTOY="La clé est reconnue, mais réservée par le système de\ndémarrage, et la libérer automatiquement a échoué.\n\nC'est le cas avec Ventoy : l'image d'installation est un\nfichier de cette clé.\n\n➜ DÉBRANCHE puis REBRANCHE la clé, attends 5 secondes, et\n  choisis « Brancher une clé USB » ci-dessous.\n\nL'installateur tourne en mémoire : la débrancher est sans\nconséquence."
   S_LOG_RO="Un support a été trouvé, mais il est en lecture seule.\n\nC'est le cas avec Ventoy : le système d'installation utilise\ncette partition, elle n'est donc pas modifiable.\n\nDébrancher puis rebrancher la clé la libère, ou choisis une\nautre solution."
   S_LOG_DETECT="Détection du support..."
@@ -154,13 +154,13 @@ else
   S_LOG_OK="Log copied to %s\n(file haos-install-*.log)\n\nYou can remove the stick."
   S_LOG_MENU="Where should the installation log be saved?\n\nNo writable medium was found automatically.\nPick an option:"
   S_LOG_M_USB="Plug in a USB stick"
-  S_LOG_M_USB_D="plug it in, wait 5 s, then confirm"
-  S_LOG_M_FMT="Reformat the installer stick"
-  S_LOG_M_FMT_D="erases the installer, the stick becomes normal"
-  S_LOG_M_SHOW="Show the log on screen"
-  S_LOG_M_SHOW_D="to photograph it — always works"
+  S_LOG_M_USB_D="wait 5 s, then confirm"
+  S_LOG_M_FMT="Reformat this stick"
+  S_LOG_M_FMT_D="erases the installer"
+  S_LOG_M_SHOW="Show on screen"
+  S_LOG_M_SHOW_D="to photograph it"
   S_LOG_M_NONE="Do not save"
-  S_LOG_M_NONE_D="the log will be lost on reboot"
+  S_LOG_M_NONE_D="the log will be lost"
   S_LOG_VTOY="The stick is recognised, but reserved by the boot system,\nand releasing it automatically failed.\n\nThis happens with Ventoy: the installation image is a file on\nthis stick.\n\n➜ UNPLUG then REPLUG the stick, wait 5 seconds, and pick\n  \"Plug in a USB stick\" below.\n\nThe installer runs from memory: unplugging it is harmless."
   S_LOG_RO="A medium was found, but it is read-only.\n\nThis happens with Ventoy: the install system is using that\npartition, so it cannot be modified.\n\nUnplugging and replugging the stick frees it, or pick another\noption."
   S_LOG_DETECT="Detecting media..."
@@ -227,17 +227,75 @@ wt_yesno(){                                 # <titre> <texte> [args whiptail...]
   whiptail --title "$title" $WT_SCROLL "$@" --yesno "$text" "$WT_H" "$WT_W"
 }
 
+# whiptail --menu : la largeur doit contenir la plus longue ETIQUETTE PLUS la plus
+# longue DESCRIPTION, sinon les lignes debordent du cadre. Des dimensions codees
+# en dur ne peuvent pas s'y adapter -- un modele de disque ou un SSID inconnus
+# sont de longueur imprevisible. Affiche l'etiquette choisie sur stdout.
+wt_menu(){                    # <titre> <invite> <hauteur_liste> <tag> <desc>...
+  local title="$1" text="$2" listh="$3"; shift 3
+  local i=0 tagw=0 descw=0 a rows cols w h lines
+  for a in "$@"; do
+    if [ $(( i % 2 )) -eq 0 ]; then (( ${#a} > tagw ))  && tagw=${#a}
+    else                            (( ${#a} > descw )) && descw=${#a}
+    fi
+    i=$(( i + 1 ))
+  done
+  rows=$(tput lines 2>/dev/null) || rows=24
+  cols=$(tput cols  2>/dev/null) || cols=80
+  [[ "$rows" =~ ^[0-9]+$ ]] || rows=24
+  [[ "$cols" =~ ^[0-9]+$ ]] || cols=80
+
+  wt_dims "$text"                     # WT_W pour l'invite, WT_H = lignes + 7
+  lines=$(( WT_H - 7 ))
+  w=$(( tagw + descw + 12 ))          # etiquette + description + cadre whiptail
+  (( WT_W > w ))     && w=$WT_W
+  (( w > cols - 4 )) && w=$(( cols - 4 ))
+  (( w < 40 ))       && w=40
+
+  # Hauteur : invite + liste + cadre. On rogne la LISTE si l'ecran est trop court,
+  # plutot que de laisser whiptail tronquer.
+  h=$(( lines + listh + 8 ))
+  if (( h > rows - 2 )); then
+    listh=$(( rows - 2 - lines - 8 ))
+    (( listh < 3 )) && listh=3
+    h=$(( lines + listh + 8 ))
+    (( h > rows - 2 )) && h=$(( rows - 2 ))
+  fi
+  whiptail --title "$title" --menu "$text" "$h" "$w" "$listh" "$@" 3>&1 1>&2 2>&3
+}
+
 # Fin de parcours sur erreur. On ETEINT par defaut plutot que de rendre un shell :
 # une invite bash ne veut rien dire pour le public visé. Le terminal reste
 # accessible via le second bouton -- et non via Ctrl+Alt+F2, dont la
 # disponibilite depend d'un getty et d'un mot de passe qu'on ne maitrise pas
 # (le service occupe tty1 et le live bascule en multi-user.target).
+
+# Extinction IMMEDIATE. Le systeme tourne entierement en RAM ('toram') : rien de
+# la session en cours n'a besoin de survivre, et l'arret complet de systemd
+# -- arret des unites, demontages, temporisations -- prend des dizaines de
+# secondes et peut se bloquer sur une unite recalcitrante. On le court-circuite.
+# Le 'sync' reste INDISPENSABLE : le journal vient peut-etre d'etre ecrit sur une
+# cle USB, et l'image du disque cible doit etre a plat sur le support.
+halt_now(){
+  sync
+  clear
+  # -ff : arret immediat sans passer par le gestionnaire de services.
+  poweroff -ff 2>/dev/null || poweroff -f 2>/dev/null || poweroff 2>/dev/null || true
+  sleep 3
+  # Repli noyau si systemd n'a pas repris la main : SysRq 'o' coupe
+  # l'alimentation depuis le noyau, sans espace utilisateur.
+  # Redirection sur le GROUPE et non sur 'echo' : c'est le shell qui signale un
+  # echec d'ouverture, son message echapperait a un 2>/dev/null pose sur echo.
+  { echo 1 > /proc/sys/kernel/sysrq; } 2>/dev/null || true
+  { echo o > /proc/sysrq-trigger; }   2>/dev/null || true
+}
+
 die(){
   wt_msg "$S_TITLE" "$1$S_RESCUE"
   save_log
   loud_console
   if wt_yesno "$S_TITLE" "$S_HALT_ASK" --yes-button "$S_HALT_OFF" --no-button "$S_HALT_SHELL"; then
-    clear; poweroff
+    halt_now
   fi
   clear; exec bash
 }
@@ -730,8 +788,8 @@ save_log(){
     [ -n "${live_dev:-}" ] && items+=("$S_LOG_M_FMT" "$S_LOG_M_FMT_D")
     items+=("$S_LOG_M_SHOW" "$S_LOG_M_SHOW_D" "$S_LOG_M_NONE" "$S_LOG_M_NONE_D")
 
-    choice=$(whiptail --title "$S_TITLE" --menu "$S_LOG_MENU" 20 74 4 \
-             "${items[@]}" 3>&1 1>&2 2>&3) || choice="$S_LOG_M_NONE"
+    choice=$(wt_menu "$S_TITLE" "$S_LOG_MENU" 4 "${items[@]}") \
+             || choice="$S_LOG_M_NONE"
 
     case "$choice" in
       "$S_LOG_M_USB")
@@ -814,7 +872,7 @@ setup_network(){
     menu+=("$S_NET_ETHRETRY" "$S_NET_ETHRETRY_D")
 
     local choice
-    choice=$(whiptail --title "$S_TITLE" --menu "$S_NET_PICK" 20 74 10 "${menu[@]}" 3>&1 1>&2 2>&3) \
+    choice=$(wt_menu "$S_TITLE" "$S_NET_PICK" 10 "${menu[@]}") \
       || { wt_yesno "$S_TITLE" "$S_NET_QUIT" && die "$S_CANCELLED" || continue; }
 
     case "$choice" in
@@ -918,7 +976,7 @@ pick_disk(){
 
   [ ${#menu[@]} -gt 0 ] || die "$S_DISK_NONE"
 
-  TARGET=$(whiptail --title "$S_TITLE" --menu "$S_DISK_PICK" 22 78 8 "${menu[@]}" 3>&1 1>&2 2>&3) \
+  TARGET=$(wt_menu "$S_TITLE" "$S_DISK_PICK" 8 "${menu[@]}") \
     || die "$S_CANCELLED"
 
   # 32 Go : sous ce seuil le dd mourrait "No space left" APRES avoir efface.
